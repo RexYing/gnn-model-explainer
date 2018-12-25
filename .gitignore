@@ -102,3 +102,13 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# edit
+*.sw?
+data/
+log/
+syn/
+
+.idea/
+
+
