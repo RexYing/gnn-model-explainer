@@ -151,7 +151,7 @@ def house(start, role_start=0):
     graph.add_nodes_from(range(start, start + 5))
     graph.add_edges_from([(start, start + 1), (start + 1, start + 2),
                           (start + 2, start + 3), (start + 3, start)])
-    graph.add_edges_from([(start, start + 2), (start + 1, start + 3)])
+    #graph.add_edges_from([(start, start + 2), (start + 1, start + 3)])
     graph.add_edges_from([(start + 4, start), (start + 4, start + 1)])
     roles = [role_start, role_start, role_start + 1,
              role_start + 1, role_start + 2]
@@ -227,7 +227,6 @@ def build_graph(width_basis, basis_type, list_shapes, start=0, rdm_basis_plugins
     plugins          :      node ids with the attached shapes
     '''
     basis, role_id = eval(basis_type)(start, width_basis)
-    print('role basis' , role_id)
     n_basis, n_shapes = nx.number_of_nodes(basis), len(list_shapes)
     start += n_basis        # indicator of the id of the next node
 
@@ -248,7 +247,6 @@ def build_graph(width_basis, basis_type, list_shapes, start=0, rdm_basis_plugins
             args += shape[1:]
         args += [0]
         graph_s, roles_graph_s = eval(shape_type)(*args)
-        print('role s: ', roles_graph_s)
         n_s = nx.number_of_nodes(graph_s)
         try:
             col_start = seen_shapes[shape_type][0]

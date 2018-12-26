@@ -50,12 +50,11 @@ def gen_syn1(feature_generator=None):
     basis_type = 'ba'
     nb_shapes = 30
     list_shapes = [['house']] * nb_shapes
-    width_basis = 150
+    width_basis = 120
 
     fig = plt.figure(figsize=(8,6), dpi=300)
 
     G, role_id, plugins = synthetic_structsim.build_graph(width_basis, basis_type, list_shapes, start=0)
-    print(role_id)
     G = perturb_new([G], 0.05)[0]
 
     if feature_generator is None:
@@ -64,27 +63,33 @@ def gen_syn1(feature_generator=None):
 
     name = basis_type + '_' + str(width_basis) + '_' + str(nb_shapes)
 
-    return G, name
+    return G, role_id, name
 
-def preprocess_input_graph(G, normalize_adj=False):
+def preprocess_input_graph(G, labels, normalize_adj=False):
     adj = np.array(nx.to_numpy_matrix(G))
     if normalize_adj:
         sqrt_deg = np.diag(1.0 / np.sqrt(np.sum(adj, axis=0, dtype=float).squeeze()))
         adj = np.matmul(np.matmul(sqrt_deg, adj), sqrt_deg)
 
-    feat_dim = G.node[0]['feat'].shape(0)
-    f = np.zeros((self.max_num_nodes, self.feat_dim), dtype=float)
+    feat_dim = G.node[0]['feat'].shape[0]
+    f = np.zeros((G.number_of_nodes(), feat_dim), dtype=float)
     for i, u in enumerate(G.nodes()):
         f[i, :] = G.node[u]['feat']
 
-    data = {'adj': adj, 'feat': f}
+    # add batch dim
+    adj = np.expand_dims(adj, axis=0)
+    f = np.expand_dims(f, axis=0)
+    labels = np.expand_dims(labels, axis=0)
+    return {'adj': adj, 'feat': f, 'labels': labels}
 
 if __name__ == "__main__":
-    G, name = gen_syn1(feature_generator=featgen.ConstFeatureGen(np.ones(5, dtype=float)))
+    G, labels, name = gen_syn1(feature_generator=featgen.ConstFeatureGen(np.ones(5, dtype=float)))
 
     fig = plt.figure(figsize=(8,6), dpi=300)
-    nx.draw(G, node_size=50, node_color='#336699',
-                edge_color='grey', width=0.5, alpha=0.7)
+    labels_dict = {i:labels[i] for i in range(G.number_of_nodes()) if not labels[i]==0}
+    nx.draw(G, pos=nx.kamada_kawai_layout(G), node_size=50, node_color='#336699',
+            labels=labels_dict, font_size=8,
+            edge_color='grey', width=0.5, alpha=0.7)
     fig.canvas.draw()
 
     plt.savefig('syn/graph_' + name)

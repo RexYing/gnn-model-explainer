@@ -5,12 +5,11 @@ import torch.nn.functional as F
 
 import numpy as np
 
-from set2set import Set2Set
 
 # GCN basic operation
 class GraphConv(nn.Module):
     def __init__(self, input_dim, output_dim, add_self=False, normalize_embedding=False,
-            dropout=0.0, bias=True):
+            dropout=0.0, bias=True, gpu=True):
         super(GraphConv, self).__init__()
         self.add_self = add_self
         self.dropout = dropout
@@ -19,9 +18,15 @@ class GraphConv(nn.Module):
         self.normalize_embedding = normalize_embedding
         self.input_dim = input_dim
         self.output_dim = output_dim
-        self.weight = nn.Parameter(torch.FloatTensor(input_dim, output_dim).cuda())
+        if not gpu:
+            self.weight = nn.Parameter(torch.FloatTensor(input_dim, output_dim))
+        else:
+            self.weight = nn.Parameter(torch.FloatTensor(input_dim, output_dim).cuda())
         if bias:
-            self.bias = nn.Parameter(torch.FloatTensor(output_dim).cuda())
+            if not gpu:
+                self.bias = nn.Parameter(torch.FloatTensor(output_dim))
+            else:
+                self.bias = nn.Parameter(torch.FloatTensor(output_dim).cuda())
         else:
             self.bias = None
 
@@ -51,6 +56,7 @@ class GcnEncoderGraph(nn.Module):
         self.num_aggs=1
 
         self.bias = True
+        self.gpu = args.gpu
         if args is not None:
             self.bias = args.bias
 
@@ -76,13 +82,13 @@ class GcnEncoderGraph(nn.Module):
     def build_conv_layers(self, input_dim, hidden_dim, embedding_dim, num_layers, add_self,
             normalize=False, dropout=0.0):
         conv_first = GraphConv(input_dim=input_dim, output_dim=hidden_dim, add_self=add_self,
-                normalize_embedding=normalize, bias=self.bias)
+                normalize_embedding=normalize, bias=self.bias, gpu=self.gpu)
         conv_block = nn.ModuleList(
                 [GraphConv(input_dim=hidden_dim, output_dim=hidden_dim, add_self=add_self,
-                        normalize_embedding=normalize, dropout=dropout, bias=self.bias) 
+                        normalize_embedding=normalize, dropout=dropout, bias=self.bias, gpu=self.gpu)
                  for i in range(num_layers-2)])
         conv_last = GraphConv(input_dim=hidden_dim, output_dim=embedding_dim, add_self=add_self,
-                normalize_embedding=normalize, bias=self.bias)
+                normalize_embedding=normalize, bias=self.bias, gpu=self.gpu)
         return conv_first, conv_block, conv_last
 
     def build_pred_layers(self, pred_input_dim, pred_hidden_dims, label_dim, num_aggs=1):
@@ -115,7 +121,9 @@ class GcnEncoderGraph(nn.Module):
     def apply_bn(self, x):
         ''' Batch normalization of 3D tensor x
         '''
-        bn_module = nn.BatchNorm1d(x.size()[1]).cuda()
+        bn_module = nn.BatchNorm1d(x.size()[1])
+        if self.gpu:
+            bn_module = bn_module.cuda()
         return bn_module(x)
 
     def gcn_forward(self, x, adj, conv_first, conv_block, conv_last, embedding_mask=None):
@@ -204,7 +212,7 @@ class GcnEncoderGraph(nn.Module):
 class GcnEncoderNode(GcnEncoderGraph):
     def __init__(self, input_dim, hidden_dim, embedding_dim, label_dim, num_layers,
             pred_hidden_dims=[], concat=True, bn=True, dropout=0.0, args=None):
-        super(GcnSet2SetEncoder, self).__init__(input_dim, hidden_dim, embedding_dim, label_dim,
+        super(GcnEncoderNode, self).__init__(input_dim, hidden_dim, embedding_dim, label_dim,
                 num_layers, pred_hidden_dims, concat, bn, dropout, args=args)
         self.celoss = nn.CrossEntropyLoss()
 
@@ -222,29 +230,8 @@ class GcnEncoderNode(GcnEncoderGraph):
         return pred
 
     def loss(self, pred, label):
+        pred = torch.transpose(pred, 1, 2)
         return self.celoss(pred, label)
-
-class GcnSet2SetEncoder(GcnEncoderGraph):
-    def __init__(self, input_dim, hidden_dim, embedding_dim, label_dim, num_layers,
-            pred_hidden_dims=[], concat=True, bn=True, dropout=0.0, args=None):
-        super(GcnSet2SetEncoder, self).__init__(input_dim, hidden_dim, embedding_dim, label_dim,
-                num_layers, pred_hidden_dims, concat, bn, dropout, args=args)
-        self.s2s = Set2Set(self.pred_input_dim, self.pred_input_dim * 2)
-
-    def forward(self, x, adj, batch_num_nodes=None, **kwargs):
-        # mask
-        max_num_nodes = adj.size()[1]
-        if batch_num_nodes is not None:
-            embedding_mask = self.construct_mask(max_num_nodes, batch_num_nodes)
-        else:
-            embedding_mask = None
-
-        embedding_tensor = self.gcn_forward(x, adj,
-                self.conv_first, self.conv_block, self.conv_last, embedding_mask)
-        out = self.s2s(embedding_tensor)
-        #out, _ = torch.max(embedding_tensor, dim=1)
-        ypred = self.pred_model(out)
-        return ypred
 
 
 class SoftPoolingGcnEncoder(GcnEncoderGraph):

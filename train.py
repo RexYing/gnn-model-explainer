@@ -18,14 +18,9 @@ import random
 import shutil
 import time
 
-import models
-import gen.feat as featgen
-import gen.data as datagen
-from node_sampler import NodeSampler
-import load_data
-import util
-
 import gengraph
+import models
+import utils.featgen as featgen
 
 
 def evaluate(dataset, model, args, name='Validation', max_num_examples=None):
@@ -53,10 +48,28 @@ def evaluate(dataset, model, args, name='Validation', max_num_examples=None):
     
     result = {'prec': metrics.precision_score(labels, preds, average='macro'),
               'recall': metrics.recall_score(labels, preds, average='macro'),
-              'acc': metrics.accuracy_score(labels, preds),
-              'F1': metrics.f1_score(labels, preds, average="micro")}
+              'acc': metrics.accuracy_score(labels, preds)}
     print(name, " accuracy:", result['acc'])
     return result
+
+def evaluate_node(ypred, labels, train_idx, test_idx):
+    _, pred_labels = torch.max(ypred, 2)
+    pred_labels = pred_labels.numpy()
+
+    pred_train = np.ravel(pred_labels[:, train_idx])
+    pred_test = np.ravel(pred_labels[:, test_idx])
+    labels_train = np.ravel(labels[:, train_idx])
+    labels_test = np.ravel(labels[:, test_idx])
+
+    result_train = {'prec': metrics.precision_score(labels_train, pred_train, average='macro'),
+              'recall': metrics.recall_score(labels_train, pred_train, average='macro'),
+              'acc': metrics.accuracy_score(labels_train, pred_train),
+              'conf_mat': metrics.confusion_matrix(labels_train, pred_train)}
+    result_test = {'prec': metrics.precision_score(labels_test, pred_test, average='macro'),
+              'recall': metrics.recall_score(labels_test, pred_test, average='macro'),
+              'acc': metrics.accuracy_score(labels_test, pred_test),
+              'conf_mat': metrics.confusion_matrix(labels_test, pred_test)}
+    return result_train, result_test
 
 def gen_prefix(args):
     if args.bmname is not None:
@@ -64,13 +77,7 @@ def gen_prefix(args):
     else:
         name = args.dataset
     name += '_' + args.method
-    if args.method == 'soft-assign':
-        name += '_l' + str(args.num_gc_layers) + 'x' + str(args.num_pool)
-        name += '_ar' + str(int(args.assign_ratio*100))
-        if args.linkpred:
-            name += '_lp'
-    else:
-        name += '_l' + str(args.num_gc_layers)
+
     name += '_h' + str(args.hidden_dim) + '_o' + str(args.output_dim)
     if not args.bias:
         name += '_nobias'
@@ -269,6 +276,48 @@ def train(dataset, model, args, same_feat=True, val_dataset=None, test_dataset=N
 
     return model, val_accs
 
+def train_node_classifier(G, labels, model, args, writer=None):
+    # train/test split only for nodes
+    num_nodes = G.number_of_nodes()
+    num_train = int(num_nodes * args.train_ratio)
+    idx = [i for i in range(num_nodes)]
+    np.random.shuffle(idx)
+    train_idx = idx[:num_train]
+    test_idx = idx[num_train:]
+
+    data = gengraph.preprocess_input_graph(G, labels)
+    labels_train = torch.tensor(data['labels'][:,train_idx], dtype=torch.long)
+
+    optimizer = torch.optim.Adam(filter(lambda p : p.requires_grad, model.parameters()), lr=args.lr)
+    model.train()
+    for epoch in range(args.num_epochs):
+        begin_time = time.time()
+        avg_loss = 0.0
+        model.zero_grad()
+
+        adj = torch.tensor(data['adj'], dtype=torch.float)
+        x = torch.tensor(data['feat'], requires_grad=True, dtype=torch.float)
+        ypred = model(x, adj)
+        ypred_train = ypred[:,train_idx,:]
+        loss = model.loss(ypred_train, labels_train)
+        loss.backward()
+        nn.utils.clip_grad_norm(model.parameters(), args.clip)
+        optimizer.step()
+        elapsed = time.time() - begin_time
+
+        result_train, result_test = evaluate_node(ypred, data['labels'], train_idx, test_idx)
+        if writer is not None:
+            writer.add_scalar('loss/avg_loss', loss, epoch)
+            writer.add_scalars('prec', {'train': result_train['prec'], 'test': result_test['prec']})
+            writer.add_scalars('recall', {'train': result_train['recall'], 'test': result_test['recall']})
+            writer.add_scalars('acc', {'train': result_train['acc'], 'test': result_test['acc']})
+
+        print('epoch: ', epoch, '; loss: ', loss.item(),
+              '; train_acc: ', result_train['acc'], '; test_acc: ', result_test['acc'],
+              '; epoch time: ', '{0:0.2f}'.format(elapsed))
+    print(result_train['conf_mat'])
+    print(result_test['conf_mat'])
+
 def prepare_data(graphs, args, test_graphs=None, max_nodes=0):
 
     random.shuffle(graphs)
@@ -324,19 +373,20 @@ def prepare_data(graphs, args, test_graphs=None, max_nodes=0):
 def syn_task1(args, writer=None):
 
     # data
-    G = gengraph.gen_syn1(feature_generator=featgen.ConstFeatureGen(np.ones(args.input_dim, dtype=float)))
+    G, labels, name = gengraph.gen_syn1(
+            feature_generator=featgen.ConstFeatureGen(np.ones(args.input_dim, dtype=float)))
+    num_classes = max(labels)+1
 
-
-    train_dataset, val_dataset, test_dataset, max_num_nodes, input_dim, assign_input_dim = prepare_data(graphs, args)
     if args.method == 'attn':
         print('Method: attn')
     else:
         print('Method: base')
-        model = models.GcnEncoderNode(input_dim, args.hidden_dim, args.output_dim, 2,
-                                       args.num_gc_layers, bn=args.bn).cuda()
+        model = models.GcnEncoderNode(args.input_dim, args.hidden_dim, args.output_dim, num_classes,
+                                       args.num_gc_layers, bn=args.bn, args=args)
+        if args.gpu:
+            model = model.cuda()
 
-    train(train_dataset, model, args, val_dataset=val_dataset, test_dataset=test_dataset,
-            writer=writer)
+    train_node_classifier(G, labels, model, args, writer=writer)
 
 def pkl_task(args, feat=None):
     with open(os.path.join(args.datadir, args.pkl_fname), 'rb') as pkl_file:
@@ -392,11 +442,6 @@ def benchmark_task(args, writer=None, feat='node-label'):
                 args.hidden_dim, assign_ratio=args.assign_ratio, num_pooling=args.num_pool,
                 bn=args.bn, dropout=args.dropout, linkpred=args.linkpred, args=args,
                 assign_input_dim=assign_input_dim).cuda()
-    elif args.method == 'base-set2set':
-        print('Method: base-set2set')
-        model = models.GcnSet2SetEncoder(
-                input_dim, args.hidden_dim, args.output_dim, args.num_classes,
-                args.num_gc_layers, bn=args.bn, dropout=args.dropout, args=args).cuda()
     else:
         print('Method: base')
         model = models.GcnEncoderGraph(
@@ -437,11 +482,6 @@ def benchmark_task_val(args, writer=None, feat='node-label'):
                     args.hidden_dim, assign_ratio=args.assign_ratio, num_pooling=args.num_pool,
                     bn=args.bn, dropout=args.dropout, linkpred=args.linkpred, args=args,
                     assign_input_dim=assign_input_dim).cuda()
-        elif args.method == 'base-set2set':
-            print('Method: base-set2set')
-            model = models.GcnSet2SetEncoder(
-                    input_dim, args.hidden_dim, args.output_dim, args.num_classes,
-                    args.num_gc_layers, bn=args.bn, dropout=args.dropout, args=args).cuda()
         else:
             print('Method: base')
             model = models.GcnEncoderGraph(
@@ -485,6 +525,9 @@ def arg_parse():
             help='Tensorboard log directory')
     parser.add_argument('--cuda', dest='cuda',
             help='CUDA.')
+    parser.add_argument('--gpu', dest='gpu', action='store_const',
+            const=True, default=False,
+            help='whether to use GPU.')
     parser.add_argument('--max-nodes', dest='max_nodes', type=int,
             help='Maximum number of nodes (ignore graghs with nodes exceeding the number.')
     parser.add_argument('--lr', dest='lr', type=float,
@@ -521,13 +564,13 @@ def arg_parse():
             help='Whether to add bias. Default to True.')
 
     parser.add_argument('--method', dest='method',
-            help='Method. Possible values: base, base-set2set, soft-assign')
+            help='Method. Possible values: base, ')
     parser.add_argument('--name-suffix', dest='name_suffix',
             help='suffix added to the output filename')
 
     parser.set_defaults(datadir='data',
                         logdir='log',
-                        dataset='syn1v2',
+                        dataset='syn1',
                         max_nodes=1000,
                         cuda='1',
                         feature_type='default',
@@ -547,7 +590,6 @@ def arg_parse():
                         method='base',
                         name_suffix='',
                         assign_ratio=0.1,
-                        num_pool=1
                        )
     return parser.parse_args()
 
