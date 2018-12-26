@@ -46,11 +46,9 @@ def perturb_new(graph_list, p):
 # Generate input graph
 #
 #####
-def gen_syn1(feature_generator=None):
+def gen_syn1(nb_shapes = 80, width_basis = 300, feature_generator=None):
     basis_type = 'ba'
-    nb_shapes = 30
     list_shapes = [['house']] * nb_shapes
-    width_basis = 120
 
     fig = plt.figure(figsize=(8,6), dpi=300)
 

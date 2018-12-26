@@ -19,6 +19,7 @@ import shutil
 import time
 
 import gengraph
+import utils.io_utils as io_utils
 import models
 import utils.featgen as featgen
 
@@ -71,22 +72,8 @@ def evaluate_node(ypred, labels, train_idx, test_idx):
               'conf_mat': metrics.confusion_matrix(labels_test, pred_test)}
     return result_train, result_test
 
-def gen_prefix(args):
-    if args.bmname is not None:
-        name = args.bmname
-    else:
-        name = args.dataset
-    name += '_' + args.method
-
-    name += '_h' + str(args.hidden_dim) + '_o' + str(args.output_dim)
-    if not args.bias:
-        name += '_nobias'
-    if len(args.name_suffix) > 0:
-        name += '_' + args.name_suffix
-    return name
-
 def gen_train_plt_name(args):
-    return 'results/' + gen_prefix(args) + '.png'
+    return 'results/' + io_utils.gen_prefix(args) + '.png'
 
 def log_assignment(assign_tensor, writer, epoch, batch_idx):
     plt.switch_backend('agg')
@@ -297,15 +284,22 @@ def train_node_classifier(G, labels, model, args, writer=None):
 
         adj = torch.tensor(data['adj'], dtype=torch.float)
         x = torch.tensor(data['feat'], requires_grad=True, dtype=torch.float)
-        ypred = model(x, adj)
+
+        if args.gpu:
+            ypred = model(x.cuda(), adj.cuda())
+        else:
+            ypred = model(x, adj)
         ypred_train = ypred[:,train_idx,:]
-        loss = model.loss(ypred_train, labels_train)
+        if args.gpu:
+            loss = model.loss(ypred_train, labels_train.cuda())
+        else:
+            loss = model.loss(ypred_train, labels_train)
         loss.backward()
         nn.utils.clip_grad_norm(model.parameters(), args.clip)
         optimizer.step()
         elapsed = time.time() - begin_time
 
-        result_train, result_test = evaluate_node(ypred, data['labels'], train_idx, test_idx)
+        result_train, result_test = evaluate_node(ypred.cpu(), data['labels'], train_idx, test_idx)
         if writer is not None:
             writer.add_scalar('loss/avg_loss', loss, epoch)
             writer.add_scalars('prec', {'train': result_train['prec'], 'test': result_test['prec']})
@@ -317,6 +311,8 @@ def train_node_classifier(G, labels, model, args, writer=None):
               '; epoch time: ', '{0:0.2f}'.format(elapsed))
     print(result_train['conf_mat'])
     print(result_test['conf_mat'])
+
+    io_utils.save_checkpoint(model, optimizer, args, num_epochs=args.num_epochs)
 
 def prepare_data(graphs, args, test_graphs=None, max_nodes=0):
 
@@ -523,6 +519,8 @@ def arg_parse():
             help='Directory where benchmark is located')
     parser.add_argument('--logdir', dest='logdir',
             help='Tensorboard log directory')
+    parser.add_argument('--ckptdir', dest='ckptdir',
+            help='Model checkpoint directory')
     parser.add_argument('--cuda', dest='cuda',
             help='CUDA.')
     parser.add_argument('--gpu', dest='gpu', action='store_const',
@@ -570,6 +568,7 @@ def arg_parse():
 
     parser.set_defaults(datadir='data',
                         logdir='log',
+                        ckptdir='ckpt',
                         dataset='syn1',
                         max_nodes=1000,
                         cuda='1',
@@ -597,15 +596,18 @@ def main():
     prog_args = arg_parse()
 
     # export scalar data to JSON for external processing
-    path = os.path.join(prog_args.logdir, gen_prefix(prog_args))
+    path = os.path.join(prog_args.logdir, io_utils.gen_prefix(prog_args))
     if os.path.isdir(path):
         print('Remove existing log dir: ', path)
         shutil.rmtree(path)
     writer = SummaryWriter(path)
     #writer = None
 
-    os.environ['CUDA_VISIBLE_DEVICES'] = prog_args.cuda
-    print('CUDA', prog_args.cuda)
+    if prog_args.gpu:
+        os.environ['CUDA_VISIBLE_DEVICES'] = prog_args.cuda
+        print('CUDA', prog_args.cuda)
+    else:
+        print('Using CPU')
 
     if prog_args.bmname is not None:
         benchmark_task_val(prog_args, writer=writer)
