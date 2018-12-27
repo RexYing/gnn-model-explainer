@@ -8,6 +8,7 @@ import numpy as np
 import sklearn.metrics as metrics
 import torch
 import torch.nn as nn
+import torch.optim as optim
 from torch.autograd import Variable
 from tensorboardX import SummaryWriter
 
@@ -23,6 +24,21 @@ import utils.io_utils as io_utils
 import models
 import utils.featgen as featgen
 
+def build_optimizer(args, model):
+    filter_fn = filter(lambda p : p.requires_grad, model.parameters())
+    if args.opt == 'adam':
+        optimizer = optim.Adam(filter_fn, lr=args.lr)
+    elif args.opt == 'sgd':
+        optimizer = optim.SGD(filter_fn, lr=args.lr, momentum=0.9)
+    elif args.opt == 'rmsprop':
+        optimizer = optim.RMSprop(filter_fn, lr=args.lr)
+    if args.opt_scheduler == 'none':
+        return None, optimizer
+    elif args.opt_scheduler == 'step':
+        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.opt_decay_step, gamma=args.opt_decay_rate)
+    elif args.opt_scheduler == 'cos':
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.opt_restart, last_epoch=args.num_epochs)
+    return scheduler, optimizer
 
 def evaluate(dataset, model, args, name='Validation', max_num_examples=None):
     model.eval()
@@ -275,7 +291,9 @@ def train_node_classifier(G, labels, model, args, writer=None):
     data = gengraph.preprocess_input_graph(G, labels)
     labels_train = torch.tensor(data['labels'][:,train_idx], dtype=torch.long)
 
-    optimizer = torch.optim.Adam(filter(lambda p : p.requires_grad, model.parameters()), lr=args.lr)
+    scheduler, optimizer = build_optimizer(args, model)
+    if scheduler is None:
+        scheduler = optimizer
     model.train()
     for epoch in range(args.num_epochs):
         begin_time = time.time()
@@ -296,7 +314,9 @@ def train_node_classifier(G, labels, model, args, writer=None):
             loss = model.loss(ypred_train, labels_train)
         loss.backward()
         nn.utils.clip_grad_norm(model.parameters(), args.clip)
-        optimizer.step()
+        scheduler.step()
+        for param_group in optimizer.param_groups:
+            print(param_group['lr'])
         elapsed = time.time() - begin_time
 
         result_train, result_test = evaluate_node(ypred.cpu(), data['labels'], train_idx, test_idx)
@@ -514,6 +534,17 @@ def arg_parse():
             const=True, default=False,
             help='Whether link prediction side objective is used')
 
+    opt_parser = parser.add_argument_group()
+    opt_parser.add_argument('--opt', dest='opt', type=str,
+            help='Type of optimizer')
+    opt_parser.add_argument('--opt-scheduler', dest='opt_scheduler', type=str,
+            help='Type of optimizer scheduler. By default none')
+    opt_parser.add_argument('--opt-restart', dest='opt_restart', type=int,
+            help='Number of epochs before restart (by default set to 0 which means no restart)')
+    opt_parser.add_argument('--opt-decay-step', dest='opt_decay_step', type=int,
+            help='Number of epochs before decay')
+    opt_parser.add_argument('--opt-decay-rate', dest='opt_decay_rate', type=float,
+            help='Learning rate decay ratio')
 
     parser.add_argument('--datadir', dest='datadir',
             help='Directory where benchmark is located')
@@ -566,10 +597,12 @@ def arg_parse():
     parser.add_argument('--name-suffix', dest='name_suffix',
             help='suffix added to the output filename')
 
-    parser.set_defaults(datadir='data',
+    parser.set_defaults(datadir='data', # io_parser
                         logdir='log',
                         ckptdir='ckpt',
                         dataset='syn1',
+                        opt='adam',   # opt_parser
+                        opt_scheduler='none',
                         max_nodes=1000,
                         cuda='1',
                         feature_type='default',
