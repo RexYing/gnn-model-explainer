@@ -21,6 +21,7 @@ import time
 
 import gengraph
 import utils.io_utils as io_utils
+import utils.parser_utils as parser_utils
 import models
 import utils.featgen as featgen
 
@@ -29,7 +30,7 @@ def build_optimizer(args, model):
     if args.opt == 'adam':
         optimizer = optim.Adam(filter_fn, lr=args.lr)
     elif args.opt == 'sgd':
-        optimizer = optim.SGD(filter_fn, lr=args.lr, momentum=0.9)
+        optimizer = optim.SGD(filter_fn, lr=args.lr, momentum=0.95)
     elif args.opt == 'rmsprop':
         optimizer = optim.RMSprop(filter_fn, lr=args.lr)
     if args.opt_scheduler == 'none':
@@ -37,7 +38,7 @@ def build_optimizer(args, model):
     elif args.opt_scheduler == 'step':
         scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.opt_decay_step, gamma=args.opt_decay_rate)
     elif args.opt_scheduler == 'cos':
-        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.opt_restart, last_epoch=args.num_epochs)
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.opt_restart)
     return scheduler, optimizer
 
 def evaluate(dataset, model, args, name='Validation', max_num_examples=None):
@@ -290,18 +291,15 @@ def train_node_classifier(G, labels, model, args, writer=None):
 
     data = gengraph.preprocess_input_graph(G, labels)
     labels_train = torch.tensor(data['labels'][:,train_idx], dtype=torch.long)
+    adj = torch.tensor(data['adj'], dtype=torch.float)
+    x = torch.tensor(data['feat'], requires_grad=True, dtype=torch.float)
 
     scheduler, optimizer = build_optimizer(args, model)
-    if scheduler is None:
-        scheduler = optimizer
     model.train()
+    ypred = None
     for epoch in range(args.num_epochs):
         begin_time = time.time()
-        avg_loss = 0.0
         model.zero_grad()
-
-        adj = torch.tensor(data['adj'], dtype=torch.float)
-        x = torch.tensor(data['feat'], requires_grad=True, dtype=torch.float)
 
         if args.gpu:
             ypred = model(x.cuda(), adj.cuda())
@@ -314,7 +312,8 @@ def train_node_classifier(G, labels, model, args, writer=None):
             loss = model.loss(ypred_train, labels_train)
         loss.backward()
         nn.utils.clip_grad_norm(model.parameters(), args.clip)
-        scheduler.step()
+
+        optimizer.step()
         for param_group in optimizer.param_groups:
             print(param_group['lr'])
         elapsed = time.time() - begin_time
@@ -329,10 +328,18 @@ def train_node_classifier(G, labels, model, args, writer=None):
         print('epoch: ', epoch, '; loss: ', loss.item(),
               '; train_acc: ', result_train['acc'], '; test_acc: ', result_test['acc'],
               '; epoch time: ', '{0:0.2f}'.format(elapsed))
+
+        if scheduler is not None:
+            scheduler.step()
     print(result_train['conf_mat'])
     print(result_test['conf_mat'])
 
-    io_utils.save_checkpoint(model, optimizer, args, num_epochs=args.num_epochs)
+    # computation graph
+    cg_data = {'adj': data['adj'],
+                'feat': data['feat'],
+                'label': data['labels'],
+                'pred': ypred.cpu().detach().numpy()}
+    io_utils.save_checkpoint(model, optimizer, args, num_epochs=-1, cg_dict=cg_data)
 
 def prepare_data(graphs, args, test_graphs=None, max_nodes=0):
 
@@ -534,17 +541,7 @@ def arg_parse():
             const=True, default=False,
             help='Whether link prediction side objective is used')
 
-    opt_parser = parser.add_argument_group()
-    opt_parser.add_argument('--opt', dest='opt', type=str,
-            help='Type of optimizer')
-    opt_parser.add_argument('--opt-scheduler', dest='opt_scheduler', type=str,
-            help='Type of optimizer scheduler. By default none')
-    opt_parser.add_argument('--opt-restart', dest='opt_restart', type=int,
-            help='Number of epochs before restart (by default set to 0 which means no restart)')
-    opt_parser.add_argument('--opt-decay-step', dest='opt_decay_step', type=int,
-            help='Number of epochs before decay')
-    opt_parser.add_argument('--opt-decay-rate', dest='opt_decay_rate', type=float,
-            help='Learning rate decay ratio')
+    parser_utils.parse_optimizer(parser)
 
     parser.add_argument('--datadir', dest='datadir',
             help='Directory where benchmark is located')
@@ -559,10 +556,6 @@ def arg_parse():
             help='whether to use GPU.')
     parser.add_argument('--max-nodes', dest='max_nodes', type=int,
             help='Maximum number of nodes (ignore graghs with nodes exceeding the number.')
-    parser.add_argument('--lr', dest='lr', type=float,
-            help='Learning rate.')
-    parser.add_argument('--clip', dest='clip', type=float,
-            help='Gradient clipping.')
     parser.add_argument('--batch-size', dest='batch_size', type=int,
             help='Batch size.')
     parser.add_argument('--epochs', dest='num_epochs', type=int,
@@ -583,8 +576,8 @@ def arg_parse():
             help='Number of label classes')
     parser.add_argument('--num-gc-layers', dest='num_gc_layers', type=int,
             help='Number of graph convolution layers before each pooling')
-    parser.add_argument('--nobn', dest='bn', action='store_const',
-            const=False, default=True,
+    parser.add_argument('--bn', dest='bn', action='store_const',
+            const=True, default=False,
             help='Whether batch normalization is used')
     parser.add_argument('--dropout', dest='dropout', type=float,
             help='Dropout rate.')
