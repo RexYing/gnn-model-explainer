@@ -34,7 +34,6 @@ def create_filename(save_dir, args, isbest=False, num_epochs=-1):
 
 def save_checkpoint(model, optimizer, args, num_epochs=-1, isbest=False, cg_dict=None):
     filename = create_filename(args.ckptdir, args, isbest, num_epochs=num_epochs)
-    print(cg_dict)
     torch.save({'epoch': num_epochs,
                 'model_type': args.method,
                 'optimizer': optimizer,

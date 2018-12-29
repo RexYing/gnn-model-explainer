@@ -8,7 +8,6 @@ import numpy as np
 import sklearn.metrics as metrics
 import torch
 import torch.nn as nn
-import torch.optim as optim
 from torch.autograd import Variable
 from tensorboardX import SummaryWriter
 
@@ -22,24 +21,10 @@ import time
 import gengraph
 import utils.io_utils as io_utils
 import utils.parser_utils as parser_utils
+import utils.train_utils as train_utils
 import models
 import utils.featgen as featgen
 
-def build_optimizer(args, model):
-    filter_fn = filter(lambda p : p.requires_grad, model.parameters())
-    if args.opt == 'adam':
-        optimizer = optim.Adam(filter_fn, lr=args.lr)
-    elif args.opt == 'sgd':
-        optimizer = optim.SGD(filter_fn, lr=args.lr, momentum=0.95)
-    elif args.opt == 'rmsprop':
-        optimizer = optim.RMSprop(filter_fn, lr=args.lr)
-    if args.opt_scheduler == 'none':
-        return None, optimizer
-    elif args.opt_scheduler == 'step':
-        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.opt_decay_step, gamma=args.opt_decay_rate)
-    elif args.opt_scheduler == 'cos':
-        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.opt_restart)
-    return scheduler, optimizer
 
 def evaluate(dataset, model, args, name='Validation', max_num_examples=None):
     model.eval()
@@ -294,7 +279,7 @@ def train_node_classifier(G, labels, model, args, writer=None):
     adj = torch.tensor(data['adj'], dtype=torch.float)
     x = torch.tensor(data['feat'], requires_grad=True, dtype=torch.float)
 
-    scheduler, optimizer = build_optimizer(args, model)
+    scheduler, optimizer = train_utils.build_optimizer(args, model.parameters())
     model.train()
     ypred = None
     for epoch in range(args.num_epochs):
@@ -335,6 +320,11 @@ def train_node_classifier(G, labels, model, args, writer=None):
     print(result_test['conf_mat'])
 
     # computation graph
+    model.eval()
+    if args.gpu:
+        ypred = model(x.gpu(), adj.gpu())
+    else:
+        ypred = model(x, adj)
     cg_data = {'adj': data['adj'],
                 'feat': data['feat'],
                 'label': data['labels'],
