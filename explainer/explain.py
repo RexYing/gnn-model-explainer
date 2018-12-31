@@ -129,3 +129,11 @@ class ExplainModule(nn.Module):
         node_pred = ypred[self.graph_idx, node_idx, :]
         print(node_pred)
         return nn.Softmax()(node_pred)
+
+    def loss(self, pred, pred_label)：
+        '''
+        Args:
+            pred: prediction made by current model
+            pred_label: the label predicted by the original model.
+        '''
+        loss = pred[pred_label]
