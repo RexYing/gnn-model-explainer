@@ -82,33 +82,48 @@ class Explainer:
         adj = torch.tensor(sub_adj, dtype=torch.float)
         x = torch.tensor(sub_feat, requires_grad=True, dtype=torch.float)
         #print('loaded pred: ', self.pred[graph_idx][node_idx])
+        pred_label = np.argmax(self.pred[graph_idx][node_idx])
+        print('pred label: ', pred_label)
 
-        explainer = ExplainModule(adj, x, self.model)
+        explainer = ExplainModule(adj, x, self.model, self.args)
 
-        self.model.train()
+        self.model.eval()
+        explainer.train()
         for epoch in range(self.args.num_epochs):
-            self.mask.zero_grad()
-            ypred = self.model(x, masked_adj)
+            explainer.optimizer.zero_grad()
+            ypred = explainer(node_idx_new)
+            loss = explainer.loss(ypred, pred_label)
+            loss.backward()
+
+            explainer.optimizer.step()
+            if explainer.scheduler is not None:
+                explainer.scheduler.step()
+
+            print('epoch: ', epoch, '; loss: ', loss.item(),
+                  '; mask density: ', explainer.mask_density(),
+                  '; pred: ', ypred)
+
+
 
 
 class ExplainModule(nn.Module):
-    def __init__(self, adj, x, model, node_idx, graph_idx=0):
+    def __init__(self, adj, x, model, args, graph_idx=0):
         super(ExplainModule, self).__init__()
         self.adj = adj
         self.x = x
         self.model = model
-        self.node_idx = node_idx
         self.graph_idx = graph_idx
+        self.args = args
 
         init_strategy='normal'
         self.mask = self.construct_edge_mask(adj.size()[-1], init_strategy=init_strategy)
-        self.optimizer = train_utils.build_optimizer(self.args, [self.mask])
+        self.scheduler, self.optimizer = train_utils.build_optimizer(args, [self.mask])
 
-        ypred = self.model(x, adj)[graph_idx][node_idx]
-        print('rerun pred: ', ypred)
-        masked_adj = adj * self.mask
-        ypred = self.model(x, masked_adj)
-        print('init mask pred: ', ypred[graph_idx][node_idx])
+        # ypred = self.model(x, adj)[graph_idx][node_idx]
+        # print('rerun pred: ', ypred)
+        # masked_adj = adj * self.mask
+        # ypred = self.model(x, masked_adj)
+        # print('init mask pred: ', ypred[graph_idx][node_idx])
 
     def construct_edge_mask(self, num_nodes, init_strategy='normal', const_val=1.0):
         mask = nn.Parameter(torch.FloatTensor(num_nodes, num_nodes))
@@ -123,17 +138,33 @@ class ExplainModule(nn.Module):
         #print(mask)
         return mask
 
+    def mask_density(self):
+        masked_adj = self.adj * self.mask
+        mask_sum = torch.sum(masked_adj)
+        adj_sum = torch.sum(self.adj)
+        return mask_sum / adj_sum
+
     def forward(self, node_idx):
-        masked_adj = adj * self.mask
-        ypred = self.model(x, adj)[self.graph_idx][self.node_idx]
+        masked_adj = self.adj * self.mask
+        ypred = self.model(self.x, masked_adj)
         node_pred = ypred[self.graph_idx, node_idx, :]
         print(node_pred)
         return nn.Softmax()(node_pred)
 
-    def loss(self, pred, pred_label)：
+    def loss(self, pred, pred_label, size_coeff=0.01):
         '''
         Args:
             pred: prediction made by current model
             pred_label: the label predicted by the original model.
         '''
-        loss = pred[pred_label]
+        logit = pred[pred_label]
+        loss = -torch.log(logit)
+
+        # size
+        #loss += size_coeff * torch.mean(torch.abs(1 - mask))
+
+        # entropy
+
+        # laplacian
+
+        return loss
