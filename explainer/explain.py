@@ -214,11 +214,13 @@ class ExplainModule(nn.Module):
 
         # grad
         # adj
-        adj_grad, x_grad = self.adj_feat_grad(node_idx, pred_label_node)[self.graph_idx]
+        adj_grad, x_grad = self.adj_feat_grad(node_idx, pred_label_node)
+        adj_grad = adj_grad[self.graph_idx]
+        x_grad = x_grad[self.graph_idx]
         grad_loss = self.coeffs['grad'] * -torch.mean(torch.abs(adj_grad) * mask)
         # feat
-        x_grad_sum = torch.sum(x_grad, 1)
-        grad_feat_loss = self.coeffs['featgrad'] * -torch.mean(x_grad_sum * mask)
+        # x_grad_sum = torch.sum(x_grad, 1)
+        #grad_feat_loss = self.coeffs['featgrad'] * -torch.mean(x_grad_sum * mask)
 
         loss = pred_loss + size_loss + grad_loss + lap_loss
         if self.writer is not None:
@@ -251,7 +253,7 @@ class ExplainModule(nn.Module):
         self.writer.add_image('mask/adj', tensorboardX.utils.figure_to_image(fig), epoch)
 
     def log_adj_grad(self, node_idx, pred_label, epoch):
-        adj_grad = torch.abs(self.adj_feat_grad(node_idx, pred_label[node_idx]))[self.graph_idx]
+        adj_grad = torch.abs(self.adj_feat_grad(node_idx, pred_label[node_idx])[0])[self.graph_idx]
         io_utils.log_matrix(self.writer, adj_grad, 'grad/adj', epoch)
         #self.adj.requires_grad = False
 

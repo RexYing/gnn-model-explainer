@@ -86,9 +86,9 @@ def main():
         print('Using CPU')
 
     path = os.path.join(prog_args.logdir, io_utils.gen_explainer_prefix(prog_args))
-    if os.path.isdir(path):
-        print('Remove existing log dir: ', path)
-        shutil.rmtree(path)
+    #if os.path.isdir(path):
+    #    print('Remove existing log dir: ', path)
+    #    shutil.rmtree(path)
     writer = SummaryWriter(path)
 
     ckpt = io_utils.load_ckpt(prog_args)
@@ -110,7 +110,7 @@ def main():
 
         explainer = explain.Explainer(model, cg_dict['adj'], cg_dict['feat'],
                                       cg_dict['label'], cg_dict['pred'], prog_args, writer=writer)
-        explainer.explain(400)
+        explainer.explain(450)
 
 if __name__ == "__main__":
     main()
