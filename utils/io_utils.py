@@ -1,5 +1,8 @@
 import os
+
+import matplotlib.pyplot as plt
 import torch
+import tensorboardX
 
 def gen_prefix(args):
     if args.bmname is not None:
@@ -13,6 +16,10 @@ def gen_prefix(args):
         name += '_nobias'
     if len(args.name_suffix) > 0:
         name += '_' + args.name_suffix
+    return name
+
+def gen_explainer_prefix(args):
+    name = gen_prefix(args) + '_explain'
     return name
 
 def create_filename(save_dir, args, isbest=False, num_epochs=-1):
@@ -50,3 +57,13 @@ def load_ckpt(args, isbest=False):
         ckpt = torch.load(filename)
     return ckpt
 
+def log_matrix(writer, mat, name, epoch, fig_size=(8,6), dpi=200):
+    plt.switch_backend('agg')
+    fig = plt.figure(figsize=fig_size, dpi=dpi)
+    plt.imshow(mat.cpu().detach().numpy(), cmap=plt.get_cmap('BuPu'))
+    cbar = plt.colorbar()
+    cbar.solids.set_edgecolor("face")
+
+    plt.tight_layout()
+    fig.canvas.draw()
+    writer.add_image(name, tensorboardX.utils.figure_to_image(fig), epoch)

@@ -306,9 +306,9 @@ def train_node_classifier(G, labels, model, args, writer=None):
         result_train, result_test = evaluate_node(ypred.cpu(), data['labels'], train_idx, test_idx)
         if writer is not None:
             writer.add_scalar('loss/avg_loss', loss, epoch)
-            writer.add_scalars('prec', {'train': result_train['prec'], 'test': result_test['prec']})
-            writer.add_scalars('recall', {'train': result_train['recall'], 'test': result_test['recall']})
-            writer.add_scalars('acc', {'train': result_train['acc'], 'test': result_test['acc']})
+            writer.add_scalars('prec', {'train': result_train['prec'], 'test': result_test['prec']}, epoch)
+            writer.add_scalars('recall', {'train': result_train['recall'], 'test': result_test['recall']}, epoch)
+            writer.add_scalars('acc', {'train': result_train['acc'], 'test': result_test['acc']}, epoch)
 
         print('epoch: ', epoch, '; loss: ', loss.item(),
               '; train_acc: ', result_train['acc'], '; test_acc: ', result_test['acc'],

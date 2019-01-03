@@ -1,18 +1,11 @@
-import matplotlib
-import matplotlib.colors as colors
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
-from matplotlib.figure import Figure
-import networkx as nx
-import numpy as np
+
 import sklearn.metrics as metrics
-import torch
-import torch.nn as nn
-import torch.optim as optim
+from tensorboardX import SummaryWriter
+
 
 import argparse
 import os
-import time
+import shutil
 
 import utils.io_utils as io_utils
 import utils.parser_utils as parser_utils
@@ -70,7 +63,7 @@ def arg_parse():
                         opt='adam',   # opt_parser
                         opt_scheduler='none',
                         cuda='0',
-                        lr=0.001,
+                        lr=0.1,
                         clip=2.0,
                         batch_size=20,
                         num_epochs=1000,
@@ -92,6 +85,12 @@ def main():
     else:
         print('Using CPU')
 
+    path = os.path.join(prog_args.logdir, io_utils.gen_explainer_prefix(prog_args))
+    if os.path.isdir(path):
+        print('Remove existing log dir: ', path)
+        shutil.rmtree(path)
+    writer = SummaryWriter(path)
+
     ckpt = io_utils.load_ckpt(prog_args)
     cg_dict = ckpt['cg']
     input_dim = cg_dict['feat'].shape[2]
@@ -110,7 +109,7 @@ def main():
         model.load_state_dict(ckpt['model_state'])
 
         explainer = explain.Explainer(model, cg_dict['adj'], cg_dict['feat'],
-                                      cg_dict['label'], cg_dict['pred'], prog_args)
+                                      cg_dict['label'], cg_dict['pred'], prog_args, writer=writer)
         explainer.explain(400)
 
 if __name__ == "__main__":
