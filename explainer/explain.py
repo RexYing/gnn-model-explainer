@@ -180,14 +180,15 @@ class ExplainModule(nn.Module):
         node_pred = ypred[self.graph_idx, node_idx, :]
         return nn.Softmax()(node_pred)
 
-    def adj_grad(self, node_idx, pred_label_node):
+    def adj_feat_grad(self, node_idx, pred_label_node):
         self.adj.requires_grad = True
+        self.x.requires_grad = True
         ypred = self.model(self.x, self.adj)
         logit = nn.Softmax()(ypred[self.graph_idx, node_idx, pred_label_node])
         loss = -torch.log(logit)
         loss.backward()
         #return (self.adj.grad+self.adj.grad.permute(0, 2, 1)) / 2
-        return self.adj.grad
+        return self.adj.grad, self.x.grad
 
     def loss(self, pred, pred_label, node_idx, epoch):
         '''
@@ -212,8 +213,12 @@ class ExplainModule(nn.Module):
         lap_loss = self.coeffs['lap'] * (pred_label_t @ L @ pred_label_t) / self.adj.numel()
 
         # grad
-        adj_grad = self.adj_grad(node_idx, pred_label_node)[self.graph_idx]
+        # adj
+        adj_grad, x_grad = self.adj_feat_grad(node_idx, pred_label_node)[self.graph_idx]
         grad_loss = self.coeffs['grad'] * -torch.mean(torch.abs(adj_grad) * mask)
+        # feat
+        x_grad_sum = torch.sum(x_grad, 1)
+        grad_feat_loss = self.coeffs['featgrad'] * -torch.mean(x_grad_sum * mask)
 
         loss = pred_loss + size_loss + grad_loss + lap_loss
         if self.writer is not None:
@@ -246,9 +251,9 @@ class ExplainModule(nn.Module):
         self.writer.add_image('mask/adj', tensorboardX.utils.figure_to_image(fig), epoch)
 
     def log_adj_grad(self, node_idx, pred_label, epoch):
-        adj_grad = torch.abs(self.adj_grad(node_idx, pred_label[node_idx]))[self.graph_idx]
+        adj_grad = torch.abs(self.adj_feat_grad(node_idx, pred_label[node_idx]))[self.graph_idx]
         io_utils.log_matrix(self.writer, adj_grad, 'grad/adj', epoch)
-        self.adj.requires_grad = False
+        #self.adj.requires_grad = False
 
     def log_masked_adj(self, epoch):
         # use [0] to remove the batch dim
