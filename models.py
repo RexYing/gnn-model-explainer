@@ -224,9 +224,9 @@ class GcnEncoderNode(GcnEncoderGraph):
         else:
             embedding_mask = None
 
-        embedding_tensor = self.gcn_forward(x, adj,
+        self.embedding_tensor = self.gcn_forward(x, adj,
                                             self.conv_first, self.conv_block, self.conv_last, embedding_mask)
-        pred = self.pred_model(embedding_tensor)
+        pred = self.pred_model(self.embedding_tensor)
         return pred
 
     def loss(self, pred, label):

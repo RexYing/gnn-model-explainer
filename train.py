@@ -322,7 +322,7 @@ def train_node_classifier(G, labels, model, args, writer=None):
     # computation graph
     model.eval()
     if args.gpu:
-        ypred = model(x.gpu(), adj.gpu())
+        ypred = model(x.cuda(), adj.cuda())
     else:
         ypred = model(x, adj)
     cg_data = {'adj': data['adj'],

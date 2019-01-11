@@ -65,6 +65,8 @@ class Explainer:
         self.args = args
         self.writer = writer
 
+        #self.representer()
+
     def _neighborhoods(self):
         hop_adj = power_adj = self.adj
         for i in range(self.n_hops-1):
@@ -72,6 +74,24 @@ class Explainer:
             hop_adj = hop_adj + power_adj
             hop_adj = (hop_adj > 0).astype(int)
         return hop_adj
+
+    def representer(self):
+        self.model.train()
+        self.model.zero_grad()
+        adj = torch.tensor(self.adj, dtype=torch.float)
+        x = torch.tensor(self.feat, requires_grad=True, dtype=torch.float)
+        label = torch.tensor(self.label, dtype=torch.long)
+
+        preds = self.model(x, adj)
+        preds.retain_grad()
+        self.embedding = self.model.embedding_tensor
+        loss = self.model.loss(preds, label)
+        loss.backward()
+        self.preds_grad = preds.grad
+        pred_idx = np.argmax(self.pred, axis=2)
+        self.preds_grad = self.preds_grad.gather()
+        print(pred_idx)
+        print(self.preds_grad.size())
 
 
     def explain(self, node_idx, graph_idx=0):
@@ -181,6 +201,7 @@ class ExplainModule(nn.Module):
         return nn.Softmax()(node_pred)
 
     def adj_feat_grad(self, node_idx, pred_label_node):
+        #self.model.zero_grad()
         self.adj.requires_grad = True
         self.x.requires_grad = True
         ypred = self.model(self.x, self.adj)

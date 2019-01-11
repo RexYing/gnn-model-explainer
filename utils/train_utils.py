@@ -2,13 +2,16 @@ import torch.optim as optim
 
 
 def build_optimizer(args, params):
+    weight_decay=0.001
     filter_fn = filter(lambda p : p.requires_grad, params)
     if args.opt == 'adam':
-        optimizer = optim.Adam(filter_fn, lr=args.lr)
+        optimizer = optim.Adam(filter_fn, lr=args.lr, weight_decay=weight_decay)
     elif args.opt == 'sgd':
-        optimizer = optim.SGD(filter_fn, lr=args.lr, momentum=0.95)
+        optimizer = optim.SGD(filter_fn, lr=args.lr, momentum=0.95, weight_decay=weight_decay)
     elif args.opt == 'rmsprop':
-        optimizer = optim.RMSprop(filter_fn, lr=args.lr)
+        optimizer = optim.RMSprop(filter_fn, lr=args.lr, weight_decay=weight_decay)
+    elif args.opt == 'adagrad':
+        optimizer = optim.Adagrad(filter_fn, lr=args.lr, weight_decay=weight_decay)
     if args.opt_scheduler == 'none':
         return None, optimizer
     elif args.opt_scheduler == 'step':
