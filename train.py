@@ -328,7 +328,8 @@ def train_node_classifier(G, labels, model, args, writer=None):
     cg_data = {'adj': data['adj'],
                 'feat': data['feat'],
                 'label': data['labels'],
-                'pred': ypred.cpu().detach().numpy()}
+                'pred': ypred.cpu().detach().numpy(),
+                'train_idx': train_idx}
     io_utils.save_checkpoint(model, optimizer, args, num_epochs=-1, cg_dict=cg_data)
 
 def prepare_data(graphs, args, test_graphs=None, max_nodes=0):

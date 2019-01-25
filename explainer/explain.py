@@ -7,6 +7,8 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 import networkx as nx
 import numpy as np
+import pandas as pd
+import seaborn as sns
 import tensorboardX.utils
 import torch
 from torch.autograd import Variable
@@ -53,19 +55,20 @@ def numpy_to_torch(img, requires_grad=True):
     return v
 
 class Explainer:
-    def __init__(self, model, adj, feat, label, pred, args, writer=None):
+    def __init__(self, model, adj, feat, label, pred, train_idx, args, writer=None):
         self.model = model
         self.model.eval()
         self.adj = adj
         self.feat = feat
         self.label = label
         self.pred = pred
+        self.train_idx = train_idx
         self.n_hops = args.num_gc_layers
         self.neighborhoods = self._neighborhoods()
         self.args = args
         self.writer = writer
 
-        #self.representer()
+        self.representer()
 
     def _neighborhoods(self):
         hop_adj = power_adj = self.adj
@@ -81,6 +84,8 @@ class Explainer:
         adj = torch.tensor(self.adj, dtype=torch.float)
         x = torch.tensor(self.feat, requires_grad=True, dtype=torch.float)
         label = torch.tensor(self.label, dtype=torch.long)
+        if self.args.gpu:
+            adj, x, label = adj.cuda(), x.cuda(), label.cuda()
 
         preds = self.model(x, adj)
         preds.retain_grad()
@@ -88,10 +93,12 @@ class Explainer:
         loss = self.model.loss(preds, label)
         loss.backward()
         self.preds_grad = preds.grad
-        pred_idx = np.argmax(self.pred, axis=2)
-        self.preds_grad = self.preds_grad.gather()
-        print(pred_idx)
-        print(self.preds_grad.size())
+        pred_idx = np.expand_dims(np.argmax(self.pred, axis=2), axis=2)
+        pred_idx = torch.LongTensor(pred_idx)
+        if self.args.gpu:
+            pred_idx = pred_idx.cuda()
+        self.alpha = -self.preds_grad.gather(dim=2,
+                index=pred_idx).squeeze(dim=2)
 
 
     def explain(self, node_idx, graph_idx=0):
@@ -117,7 +124,15 @@ class Explainer:
         pred_label = np.argmax(self.pred[graph_idx][neighbors], axis=1)
         print('pred label: ', pred_label[node_idx_new])
 
+        f_test = self.embedding[graph_idx, node_idx, :]
+        f_idx = self.embedding[graph_idx, self.train_idx, :]
+        alpha = self.alpha[graph_idx, self.train_idx]
+        rep_val = (f_idx @ f_test) * alpha
+        self.log_representer(rep_val)
+
         explainer = ExplainModule(adj, x, self.model, label, self.args, writer=self.writer)
+        if self.args.gpu:
+            explainer = explainer.cuda()
 
         self.model.eval()
         explainer.train()
@@ -144,8 +159,18 @@ class Explainer:
                     explainer.log_masked_adj(epoch)
                     explainer.log_adj_grad(node_idx_new, pred_label, epoch)
 
+    def log_representer(self, rep_val):
 
+        rep_val = rep_val.cpu().detach().numpy()
+        plt.switch_backend('agg')
+        fig = plt.figure(figsize=(4,3), dpi=400)
+        dat = [[i, rep_val[i]] for i in range(len(rep_val))]
+        dat = pd.DataFrame(dat, columns=['idx', 'rep val'])
+        sns.barplot(x='idx', y='rep val', data=dat)
 
+        fig.axes[0].xaxis.set_visible(False)
+        fig.canvas.draw()
+        self.writer.add_image('local/representer_bar', tensorboardX.utils.figure_to_image(fig), 0)
 
 class ExplainModule(nn.Module):
     def __init__(self, adj, x, model, label, args, graph_idx=0, writer=None, use_sigmoid=True):
@@ -187,25 +212,38 @@ class ExplainModule(nn.Module):
     def _masked_adj(self):
         sym_mask = torch.sigmoid(self.mask) if self.use_sigmoid else self.mask
         sym_mask = (sym_mask + sym_mask.t()) / 2
-        return self.adj * sym_mask
+        adj = self.adj.cuda() if self.args.gpu else self.adj
+        return adj * sym_mask
 
     def mask_density(self):
-        mask_sum = torch.sum(self._masked_adj())
+        mask_sum = torch.sum(self._masked_adj()).cpu()
         adj_sum = torch.sum(self.adj)
         return mask_sum / adj_sum
 
     def forward(self, node_idx):
         self.masked_adj = self._masked_adj()
-        ypred = self.model(self.x, self.masked_adj)
+        if self.args.gpu:
+            x = self.x.cuda()
+            masked_adj = self.masked_adj.cuda()
+        else:
+            x, masked_adj = self.x, self.masked_adj
+        ypred = self.model(x, masked_adj)
         node_pred = ypred[self.graph_idx, node_idx, :]
-        return nn.Softmax()(node_pred)
+        return nn.Softmax(dim=0)(node_pred)
 
     def adj_feat_grad(self, node_idx, pred_label_node):
-        #self.model.zero_grad()
+        self.model.zero_grad()
         self.adj.requires_grad = True
         self.x.requires_grad = True
-        ypred = self.model(self.x, self.adj)
-        logit = nn.Softmax()(ypred[self.graph_idx, node_idx, pred_label_node])
+        if self.args.gpu:
+            adj = self.adj.cuda()
+            x = self.x.cuda()
+            label = self.label.cuda()
+        else:
+            x, adj = self.x, self.adj
+        ypred = self.model(x, adj)
+        logit = nn.Softmax(dim=0)(ypred[self.graph_idx, node_idx, :])
+        logit = logit[pred_label_node]
         loss = -torch.log(logit)
         loss.backward()
         #return (self.adj.grad+self.adj.grad.permute(0, 2, 1)) / 2
@@ -231,6 +269,9 @@ class ExplainModule(nn.Module):
         D = torch.diag(torch.sum(self.masked_adj[0], 0))
         L = D - self.masked_adj[self.graph_idx]
         pred_label_t = torch.tensor(pred_label, dtype=torch.float)
+        if self.args.gpu:
+            pred_label_t = pred_label_t.cuda()
+            L = L.cuda()
         lap_loss = self.coeffs['lap'] * (pred_label_t @ L @ pred_label_t) / self.adj.numel()
 
         # grad
@@ -238,6 +279,8 @@ class ExplainModule(nn.Module):
         adj_grad, x_grad = self.adj_feat_grad(node_idx, pred_label_node)
         adj_grad = adj_grad[self.graph_idx]
         x_grad = x_grad[self.graph_idx]
+        if self.args.gpu:
+            adj_grad = adj_grad.cuda()
         grad_loss = self.coeffs['grad'] * -torch.mean(torch.abs(adj_grad) * mask)
         # feat
         # x_grad_sum = torch.sum(x_grad, 1)
@@ -289,11 +332,11 @@ class ExplainModule(nn.Module):
         edge_colors = [G[i][j]['weight'] for (i,j) in G.edges()]
 
         plt.switch_backend('agg')
-        fig = plt.figure(figsize=(8,6), dpi=200)
-        nx.draw(G, pos=nx.spring_layout(G), with_labels=True, font_size=6,
+        fig = plt.figure(figsize=(4,3), dpi=600)
+        nx.draw(G, pos=nx.spring_layout(G), with_labels=True, font_size=4,
                 node_color='#336699',
                 edge_color=edge_colors, edge_cmap=plt.get_cmap('Greys'), edge_vmin=0.0, edge_vmax=1.0,
-                width=0.5, node_size=100,
+                width=0.5, node_size=25,
                 alpha=0.7)
         fig.axes[0].xaxis.set_visible(False)
         fig.canvas.draw()

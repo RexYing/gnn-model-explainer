@@ -109,8 +109,8 @@ def main():
         model.load_state_dict(ckpt['model_state'])
 
         explainer = explain.Explainer(model, cg_dict['adj'], cg_dict['feat'],
-                                      cg_dict['label'], cg_dict['pred'], prog_args, writer=writer)
-        explainer.explain(400)
+                                      cg_dict['label'], cg_dict['pred'], cg_dict['train_idx'], prog_args, writer=writer)
+        explainer.explain(420)
 
 if __name__ == "__main__":
     main()

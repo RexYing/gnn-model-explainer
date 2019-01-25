@@ -53,7 +53,7 @@ def gen_syn1(nb_shapes = 80, width_basis = 300, feature_generator=None):
     fig = plt.figure(figsize=(8,6), dpi=300)
 
     G, role_id, plugins = synthetic_structsim.build_graph(width_basis, basis_type, list_shapes, start=0)
-    G = perturb_new([G], 0.05)[0]
+    G = perturb_new([G], 0.01)[0]
 
     if feature_generator is None:
         feature_generator = featgen.ConstFeatureGen(1)
