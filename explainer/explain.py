@@ -101,7 +101,7 @@ class Explainer:
                 index=pred_idx).squeeze(dim=2)
 
 
-    def explain(self, node_idx, graph_idx=0):
+    def explain(self, node_idx, graph_idx=0, unconstrained=False):
         '''Explain a single node prediction
         '''
         print('node label: ', self.label[graph_idx][node_idx])
@@ -138,7 +138,7 @@ class Explainer:
         explainer.train()
         for epoch in range(self.args.num_epochs):
             explainer.optimizer.zero_grad()
-            ypred = explainer(node_idx_new)
+            ypred = explainer(node_idx_new, unconstrained=unconstrained)
             loss = explainer.loss(ypred, pred_label, node_idx_new, epoch)
             loss.backward()
 
@@ -185,8 +185,17 @@ class ExplainModule(nn.Module):
         self.use_sigmoid = use_sigmoid
 
         init_strategy='normal'
-        self.mask = self.construct_edge_mask(adj.size()[-1], init_strategy=init_strategy)
-        self.scheduler, self.optimizer = train_utils.build_optimizer(args, [self.mask])
+        num_nodes = adj.size()[1]
+        self.mask, self.mask_bias = self.construct_edge_mask(num_nodes, init_strategy=init_strategy)
+        params = [self.mask]
+        if self.mask_bias is not None:
+            params.append(self.mask_bias)
+        # For masking diagonal entries
+        self.diag_mask = torch.ones(num_nodes, num_nodes) - torch.eye(num_nodes)
+        if args.gpu:
+            self.diag_mask = self.diag_mask.cuda()
+
+        self.scheduler, self.optimizer = train_utils.build_optimizer(args, params)
 
         self.coeffs = {'size': 0.5, 'grad': 0, 'lap': 1.0}
 
@@ -199,29 +208,44 @@ class ExplainModule(nn.Module):
     def construct_edge_mask(self, num_nodes, init_strategy='normal', const_val=1.0):
         mask = nn.Parameter(torch.FloatTensor(num_nodes, num_nodes))
         if init_strategy == 'normal':
+            std = nn.init.calculate_gain('relu') * math.sqrt(2.0 / (num_nodes + num_nodes))
             with torch.no_grad():
-                std = nn.init.calculate_gain('relu') * math.sqrt(2.0 / (num_nodes + num_nodes))
                 mask.normal_(1.0, std)
                 #mask.clamp_(0.0, 1.0)
         elif init_strategy == 'const':
             nn.init.constant_(mask, const_val)
 
+        if self.args.mask_bias:
+            mask_bias = nn.Parameter(torch.FloatTensor(num_nodes, num_nodes))
+            nn.init.constant_(mask_bias, 0.0)
+        else:
+            mask_bias = None
         #print(mask)
-        return mask
+        return mask, mask_bias
 
     def _masked_adj(self):
         sym_mask = torch.sigmoid(self.mask) if self.use_sigmoid else self.mask
         sym_mask = (sym_mask + sym_mask.t()) / 2
         adj = self.adj.cuda() if self.args.gpu else self.adj
-        return adj * sym_mask
+        masked_adj = adj * sym_mask
+        if self.args.mask_bias:
+            bias = (self.mask_bias + self.mask_bias.t()) / 2
+            bias = nn.ReLU6()(bias * 6) / 6
+            masked_adj += (bias + bias.t()) / 2
+        return masked_adj * self.diag_mask
 
     def mask_density(self):
         mask_sum = torch.sum(self._masked_adj()).cpu()
         adj_sum = torch.sum(self.adj)
         return mask_sum / adj_sum
 
-    def forward(self, node_idx):
-        self.masked_adj = self._masked_adj()
+    def forward(self, node_idx, unconstrained=False):
+        if unconstrained:
+            sym_mask = torch.sigmoid(self.mask) if self.use_sigmoid else self.mask
+            self.masked_adj = torch.unsqueeze((sym_mask + sym_mask.t()) / 2, 0) * self.diag_mask
+        else:
+            self.masked_adj = self._masked_adj()
+
         if self.args.gpu:
             x = self.x.cuda()
             masked_adj = self.masked_adj.cuda()
@@ -276,20 +300,21 @@ class ExplainModule(nn.Module):
 
         # grad
         # adj
-        adj_grad, x_grad = self.adj_feat_grad(node_idx, pred_label_node)
-        adj_grad = adj_grad[self.graph_idx]
-        x_grad = x_grad[self.graph_idx]
-        if self.args.gpu:
-            adj_grad = adj_grad.cuda()
-        grad_loss = self.coeffs['grad'] * -torch.mean(torch.abs(adj_grad) * mask)
+        #adj_grad, x_grad = self.adj_feat_grad(node_idx, pred_label_node)
+        #adj_grad = adj_grad[self.graph_idx]
+        #x_grad = x_grad[self.graph_idx]
+        #if self.args.gpu:
+        #    adj_grad = adj_grad.cuda()
+        #grad_loss = self.coeffs['grad'] * -torch.mean(torch.abs(adj_grad) * mask)
+
         # feat
         # x_grad_sum = torch.sum(x_grad, 1)
         #grad_feat_loss = self.coeffs['featgrad'] * -torch.mean(x_grad_sum * mask)
 
-        loss = pred_loss + size_loss + grad_loss + lap_loss
+        loss = pred_loss + size_loss + lap_loss
         if self.writer is not None:
             self.writer.add_scalar('optimization/size_loss', size_loss, epoch)
-            self.writer.add_scalar('optimization/grad_loss', grad_loss, epoch)
+            #self.writer.add_scalar('optimization/grad_loss', grad_loss, epoch)
             self.writer.add_scalar('optimization/pred_loss', pred_loss, epoch)
             self.writer.add_scalar('optimization/lap_loss', lap_loss, epoch)
             self.writer.add_scalar('optimization/overall_loss', loss, epoch)
@@ -297,16 +322,16 @@ class ExplainModule(nn.Module):
 
     def log_mask(self, epoch):
         plt.switch_backend('agg')
-        fig = plt.figure(figsize=(8,6), dpi=200)
+        fig = plt.figure(figsize=(4,3), dpi=400)
         plt.imshow(self.mask.cpu().detach().numpy(), cmap=plt.get_cmap('BuPu'))
         cbar = plt.colorbar()
         cbar.solids.set_edgecolor("face")
 
         plt.tight_layout()
         fig.canvas.draw()
-        self.writer.add_image('mask/mask_all', tensorboardX.utils.figure_to_image(fig), epoch)
+        self.writer.add_image('mask/mask', tensorboardX.utils.figure_to_image(fig), epoch)
 
-        fig = plt.figure(figsize=(8,6), dpi=200)
+        fig = plt.figure(figsize=(4,3), dpi=400)
         # use [0] to remove the batch dim
         plt.imshow(self.masked_adj[0].cpu().detach().numpy(), cmap=plt.get_cmap('BuPu'))
         cbar = plt.colorbar()
@@ -315,6 +340,18 @@ class ExplainModule(nn.Module):
         plt.tight_layout()
         fig.canvas.draw()
         self.writer.add_image('mask/adj', tensorboardX.utils.figure_to_image(fig), epoch)
+
+        if self.args.mask_bias:
+            fig = plt.figure(figsize=(4,3), dpi=400)
+            # use [0] to remove the batch dim
+            plt.imshow(self.mask_bias.cpu().detach().numpy(), cmap=plt.get_cmap('BuPu'))
+            cbar = plt.colorbar()
+            cbar.solids.set_edgecolor("face")
+
+            plt.tight_layout()
+            fig.canvas.draw()
+            self.writer.add_image('mask/bias', tensorboardX.utils.figure_to_image(fig), epoch)
+
 
     def log_adj_grad(self, node_idx, pred_label, epoch):
         adj_grad = torch.abs(self.adj_feat_grad(node_idx, pred_label[node_idx])[0])[self.graph_idx]
@@ -329,11 +366,12 @@ class ExplainModule(nn.Module):
         G.add_nodes_from(range(num_nodes))
         weighted_edge_list = [(i, j, masked_adj[i, j]) for i in range(num_nodes) for j in range(num_nodes) if masked_adj[i,j] > 0.01]
         G.add_weighted_edges_from(weighted_edge_list)
-        edge_colors = [G[i][j]['weight'] for (i,j) in G.edges()]
+        Gc = max(nx.connected_component_subgraphs(G), key=len)
+        edge_colors = [Gc[i][j]['weight'] for (i,j) in Gc.edges()]
 
         plt.switch_backend('agg')
         fig = plt.figure(figsize=(4,3), dpi=600)
-        nx.draw(G, pos=nx.spring_layout(G), with_labels=True, font_size=4,
+        nx.draw(Gc, pos=nx.spring_layout(G), with_labels=True, font_size=4,
                 node_color='#336699',
                 edge_color=edge_colors, edge_cmap=plt.get_cmap('Greys'), edge_vmin=0.0, edge_vmax=1.0,
                 width=0.5, node_size=25,

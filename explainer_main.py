@@ -51,6 +51,10 @@ def arg_parse():
     parser.add_argument('--nobias', dest='bias', action='store_const',
             const=False, default=True,
             help='Whether to add bias. Default to True.')
+    # Explainer
+    parser.add_argument('--mask-bias', dest='mask_bias', action='store_const',
+            const=True, default=False,
+            help='Whether to add bias. Default to True.')
 
     parser.add_argument('--method', dest='method',
             help='Method. Possible values: base, ')
@@ -110,7 +114,7 @@ def main():
 
         explainer = explain.Explainer(model, cg_dict['adj'], cg_dict['feat'],
                                       cg_dict['label'], cg_dict['pred'], cg_dict['train_idx'], prog_args, writer=writer)
-        explainer.explain(420)
+        explainer.explain(420, unconstrained=False)
 
 if __name__ == "__main__":
     main()
