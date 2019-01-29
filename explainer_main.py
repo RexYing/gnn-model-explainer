@@ -52,6 +52,9 @@ def arg_parse():
     parser.add_argument('--nobias', dest='bias', action='store_const',
             const=False, default=True,
             help='Whether to add bias. Default to True.')
+    parser.add_argument('--no-writer', dest='writer', action='store_const',
+            const=False, default=True,
+            help='Whether to add bias. Default to True.')
     # Explainer
     parser.add_argument('--mask-bias', dest='mask_bias', action='store_const',
             const=True, default=False,
@@ -90,12 +93,14 @@ def main():
     else:
         print('Using CPU')
 
-    path = os.path.join(prog_args.logdir, io_utils.gen_explainer_prefix(prog_args))
-    #if os.path.isdir(path):
-    #    print('Remove existing log dir: ', path)
-    #    shutil.rmtree(path)
-    #writer = SummaryWriter(path)
-    writer = None
+    if prog_args.writer:
+        path = os.path.join(prog_args.logdir, io_utils.gen_explainer_prefix(prog_args))
+        #if os.path.isdir(path):
+        #    print('Remove existing log dir: ', path)
+        #    shutil.rmtree(path)
+        writer = SummaryWriter(path)
+    else:
+        writer = None
 
     ckpt = io_utils.load_ckpt(prog_args)
     cg_dict = ckpt['cg']
@@ -116,8 +121,9 @@ def main():
 
         explainer = explain.Explainer(model, cg_dict['adj'], cg_dict['feat'],
                                       cg_dict['label'], cg_dict['pred'], cg_dict['train_idx'],
-                                      prog_args, writer=writer, print_training=False)
-        explainer.explain(400, unconstrained=False)
+                                      prog_args, writer=writer, print_training=True)
+        train_idx = cg_dict['train_idx']
+        explainer.explain(500, unconstrained=False)
 
         # explain a set of nodes
         #masked_adj = explainer.explain_nodes([i for i in range(300, 700, 5)])

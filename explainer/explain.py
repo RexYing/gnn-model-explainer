@@ -1,4 +1,5 @@
 import math
+import time
 
 import matplotlib
 import matplotlib.colors as colors
@@ -8,6 +9,7 @@ from matplotlib.figure import Figure
 import networkx as nx
 import numpy as np
 import pandas as pd
+import sklearn.metrics as metrics
 import seaborn as sns
 import tensorboardX.utils
 import torch
@@ -99,25 +101,30 @@ class Explainer:
         pred_idx = torch.LongTensor(pred_idx)
         if self.args.gpu:
             pred_idx = pred_idx.cuda()
-        self.alpha = -self.preds_grad.gather(dim=2,
-                index=pred_idx).squeeze(dim=2)
+        #self.alpha = -self.preds_grad.gather(dim=2,
+        #        index=pred_idx).squeeze(dim=2)
+        self.alpha = self.preds_grad
 
+    def extract_neighborhood(self, node_idx, graph_idx=0):
+        neighbors_adj_row = self.neighborhoods[graph_idx][node_idx, :]
+        # index of the query node in the new adj
+        node_idx_new = sum(neighbors_adj_row[:node_idx])
+        neighbors = np.nonzero(neighbors_adj_row)[0]
+        sub_adj = self.adj[graph_idx][neighbors][:, neighbors]
+        sub_feat = self.feat[graph_idx, neighbors]
+        sub_label = self.label[graph_idx][neighbors]
+        return node_idx_new, sub_adj, sub_feat, sub_label, neighbors
 
     def explain(self, node_idx, graph_idx=0, unconstrained=False):
         '''Explain a single node prediction
         '''
         print('node label: ', self.label[graph_idx][node_idx])
-        neighbors_adj_row = self.neighborhoods[graph_idx][node_idx, :]
         # index of the query node in the new adj
-        node_idx_new = sum(neighbors_adj_row[:node_idx])
-        neighbors = np.nonzero(neighbors_adj_row)[0]
-        print('neigh idx: ', node_idx, node_idx_new)
-        sub_adj = self.adj[graph_idx][neighbors][:, neighbors]
+        node_idx_new, sub_adj, sub_feat, sub_label, neighbors = self.extract_neighborhood(node_idx, graph_idx)
         sub_adj = np.expand_dims(sub_adj, axis=0)
-        sub_feat = self.feat[graph_idx, neighbors]
         sub_feat = np.expand_dims(sub_feat, axis=0)
-        sub_label = self.label[graph_idx][neighbors]
         sub_label = np.expand_dims(sub_label, axis=0)
+        print('neigh graph idx: ', node_idx, node_idx_new)
 
         adj = torch.tensor(sub_adj, dtype=torch.float)
         x = torch.tensor(sub_feat, requires_grad=True, dtype=torch.float)
@@ -128,10 +135,11 @@ class Explainer:
 
         f_test = self.embedding[graph_idx, node_idx, :]
         f_idx = self.embedding[graph_idx, self.train_idx, :]
-        alpha = self.alpha[graph_idx, self.train_idx]
-        rep_val = (f_idx @ f_test) * alpha
+        alpha = self.alpha[graph_idx, self.train_idx, pred_label[node_idx_new]]
+        sim_val = f_idx @ f_test
+        rep_val = sim_val * alpha
         if self.writer is not None:
-            self.log_representer(rep_val)
+            self.log_representer(rep_val, sim_val, alpha)
 
         explainer = ExplainModule(adj, x, self.model, label, self.args, writer=self.writer)
         if self.args.gpu:
@@ -139,6 +147,7 @@ class Explainer:
 
         self.model.eval()
         explainer.train()
+        begin_time = time.time()
         for epoch in range(self.args.num_epochs):
             explainer.optimizer.zero_grad()
             ypred = explainer(node_idx_new, unconstrained=unconstrained)
@@ -160,9 +169,10 @@ class Explainer:
                 self.writer.add_scalar('optimization/lr', explainer.optimizer.param_groups[0]['lr'], epoch)
                 if epoch % 100 == 0:
                     explainer.log_mask(epoch)
-                    explainer.log_masked_adj(epoch)
+                    explainer.log_masked_adj(node_idx_new, epoch)
                     explainer.log_adj_grad(node_idx_new, pred_label, epoch)
 
+        print('finished training in ', time.time() - begin_time)
         masked_adj = explainer.masked_adj[0].cpu().detach().numpy()
         return masked_adj
 
@@ -170,22 +180,68 @@ class Explainer:
         masked_adjs = [self.explain(node_idx, graph_idx=graph_idx) for node_idx in node_indices]
         return masked_adjs
 
-    def log_representer(self, rep_val):
+    def log_representer(self, rep_val, sim_val, alpha, graph_idx=0):
 
         rep_val = rep_val.cpu().detach().numpy()
+        sim_val = sim_val.cpu().detach().numpy()
+        alpha = alpha.cpu().detach().numpy()
         sorted_rep = sorted(range(len(rep_val)), key=lambda k: rep_val[k])
         print(sorted_rep)
-        most_pos_idx = [sorted_rep[i] for i in range(3)]
+        topk = 5
+        most_neg_idx = [sorted_rep[i] for i in range(topk)]
+        most_pos_idx = [sorted_rep[-i-1] for i in range(topk)]
+        rep_idx = [most_pos_idx, most_neg_idx]
 
+        pred = np.argmax(self.pred[graph_idx][self.train_idx], axis=1)
+        print(metrics.confusion_matrix(self.label[graph_idx][self.train_idx], pred))
         plt.switch_backend('agg')
-        fig = plt.figure(figsize=(4,3), dpi=400)
-        dat = [[i, rep_val[i]] for i in range(len(rep_val))]
-        dat = pd.DataFrame(dat, columns=['idx', 'rep val'])
-        sns.barplot(x='idx', y='rep val', data=dat)
+        fig = plt.figure(figsize=(5,3), dpi=600)
+        for i in range(2):
+            for j in range(topk):
+                idx = self.train_idx[rep_idx[i][j]]
+                print('node idx: ', idx,
+                        '; node label: ', self.label[graph_idx][idx],
+                        '; pred: ', np.argmax(self.pred[graph_idx][idx])
+                        )
 
+                idx_new, sub_adj, sub_feat, sub_label, neighbors = self.extract_neighborhood(idx,
+                        graph_idx)
+                G = nx.from_numpy_matrix(sub_adj)
+                node_colors = [1 for i in range(G.number_of_nodes())]
+                node_colors[idx_new] = 0
+                #node_color='#336699',
+
+                ax = plt.subplot(2, topk, i*topk+j+1)
+                nx.draw(G, pos=nx.spring_layout(G), with_labels=True, font_size=4,
+                        node_color=node_colors, cmap=plt.get_cmap('Set1'), vmin=0, vmax=8,
+                        edge_vmin=0.0, edge_vmax=1.0,
+                        width=0.5, node_size=25,
+                        alpha=0.7)
+                ax.xaxis.set_visible(False)
+        fig.canvas.draw()
+        self.writer.add_image('local/representer_neigh', tensorboardX.utils.figure_to_image(fig), 0)
+
+
+        fig = plt.figure(figsize=(4,3), dpi=400)
+        dat = [[i, rep_val[i], sim_val[i], alpha[i]] for i in range(len(rep_val))]
+        dat = pd.DataFrame(dat, columns=['idx', 'rep val', 'sim_val', 'alpha'])
+        sns.barplot(x='idx', y='rep val', data=dat)
         fig.axes[0].xaxis.set_visible(False)
         fig.canvas.draw()
         self.writer.add_image('local/representer_bar', tensorboardX.utils.figure_to_image(fig), 0)
+
+        fig = plt.figure(figsize=(4,3), dpi=400)
+        sns.barplot(x='idx', y='alpha', data=dat)
+        fig.axes[0].xaxis.set_visible(False)
+        fig.canvas.draw()
+        self.writer.add_image('local/alpha_bar', tensorboardX.utils.figure_to_image(fig), 0)
+
+        fig = plt.figure(figsize=(4,3), dpi=400)
+        sns.barplot(x='idx', y='sim_val', data=dat)
+        fig.axes[0].xaxis.set_visible(False)
+        fig.canvas.draw()
+        self.writer.add_image('local/sim_bar', tensorboardX.utils.figure_to_image(fig), 0)
+
 
 class ExplainModule(nn.Module):
     def __init__(self, adj, x, model, label, args, graph_idx=0, writer=None, use_sigmoid=True):
@@ -225,7 +281,7 @@ class ExplainModule(nn.Module):
         if init_strategy == 'normal':
             std = nn.init.calculate_gain('relu') * math.sqrt(2.0 / (num_nodes + num_nodes))
             with torch.no_grad():
-                mask.normal_(1.0, std)
+                mask.normal_(0.5, std)
                 #mask.clamp_(0.0, 1.0)
         elif init_strategy == 'const':
             nn.init.constant_(mask, const_val)
@@ -298,7 +354,8 @@ class ExplainModule(nn.Module):
             pred_label: the label predicted by the original model.
         '''
         pred_label_node = pred_label[node_idx]
-        logit = pred[pred_label_node]
+        gt_label_node = self.label[0][node_idx]
+        logit = pred[gt_label_node]
         pred_loss = -torch.log(logit)
 
         # size
@@ -377,21 +434,23 @@ class ExplainModule(nn.Module):
         io_utils.log_matrix(self.writer, adj_grad, 'grad/adj', epoch)
         #self.adj.requires_grad = False
 
-    def log_masked_adj(self, epoch):
+    def log_masked_adj(self, node_idx, epoch):
         # use [0] to remove the batch dim
         masked_adj = self.masked_adj[0].cpu().detach().numpy()
         num_nodes = self.adj.size()[-1]
         G = nx.Graph()
         G.add_nodes_from(range(num_nodes))
+        G.node[node_idx]['color'] = 0
         weighted_edge_list = [(i, j, masked_adj[i, j]) for i in range(num_nodes) for j in range(num_nodes) if masked_adj[i,j] > 0.01]
         G.add_weighted_edges_from(weighted_edge_list)
         Gc = max(nx.connected_component_subgraphs(G), key=len)
         edge_colors = [Gc[i][j]['weight'] for (i,j) in Gc.edges()]
+        node_colors = [Gc.node[i]['color'] if 'color' in Gc.node[i] else 1 for i in Gc.nodes()]
 
         plt.switch_backend('agg')
         fig = plt.figure(figsize=(4,3), dpi=600)
         nx.draw(Gc, pos=nx.spring_layout(G), with_labels=True, font_size=4,
-                node_color='#336699',
+                node_color=node_colors, vmin=0, vmax=8, cmap=plt.get_cmap('Set1'),
                 edge_color=edge_colors, edge_cmap=plt.get_cmap('Greys'), edge_vmin=0.0, edge_vmax=1.0,
                 width=0.5, node_size=25,
                 alpha=0.7)

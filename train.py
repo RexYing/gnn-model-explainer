@@ -279,7 +279,8 @@ def train_node_classifier(G, labels, model, args, writer=None):
     adj = torch.tensor(data['adj'], dtype=torch.float)
     x = torch.tensor(data['feat'], requires_grad=True, dtype=torch.float)
 
-    scheduler, optimizer = train_utils.build_optimizer(args, model.parameters())
+    scheduler, optimizer = train_utils.build_optimizer(args, model.parameters(),
+            weight_decay=args.weight_decay)
     model.train()
     ypred = None
     for epoch in range(args.num_epochs):
@@ -575,6 +576,8 @@ def arg_parse():
     parser.add_argument('--nobias', dest='bias', action='store_const',
             const=False, default=True,
             help='Whether to add bias. Default to True.')
+    parser.add_argument('--weight-decay', dest='weight_decay', type=float,
+            help='Weight decay regularization constant.')
 
     parser.add_argument('--method', dest='method',
             help='Method. Possible values: base, ')
@@ -603,6 +606,7 @@ def arg_parse():
                         num_classes=2,
                         num_gc_layers=3,
                         dropout=0.0,
+                        weight_decay=0.005,
                         method='base',
                         name_suffix='',
                         assign_ratio=0.1,
