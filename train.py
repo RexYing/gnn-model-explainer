@@ -403,6 +403,23 @@ def syn_task1(args, writer=None):
 
     train_node_classifier(G, labels, model, args, writer=writer)
 
+def syn_task2(args, writer=None):
+    # data
+    num_classes = 4 
+    G, labels, name = gengraph.gen_syn2(n_classes=num_classes)
+
+    if args.method == 'attn':
+        print('Method: attn')
+    else:
+        print('Method: base')
+        model = models.GcnEncoderNode(2, args.hidden_dim, args.output_dim, num_classes,
+                                       args.num_gc_layers, bn=args.bn, args=args)
+        if args.gpu:
+            model = model.cuda()
+
+    train_node_classifier(G, labels, model, args, writer=writer)
+
+
 def pkl_task(args, feat=None):
     with open(os.path.join(args.datadir, args.pkl_fname), 'rb') as pkl_file:
         data = pickle.load(pkl_file)
@@ -637,6 +654,9 @@ def main():
     elif prog_args.dataset is not None:
         if prog_args.dataset == 'syn1':
             syn_task1(prog_args, writer=writer)
+        elif prog_args.dataset == 'syn2':
+            syn_task2(prog_args, writer=writer)
+
 
     writer.close()
 

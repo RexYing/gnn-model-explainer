@@ -59,6 +59,8 @@ def arg_parse():
     parser.add_argument('--mask-bias', dest='mask_bias', action='store_const',
             const=True, default=False,
             help='Whether to add bias. Default to True.')
+    parser.add_argument('--explain-node', dest='explain_node', type=int,
+            help='Node to explain.')
 
     parser.add_argument('--method', dest='method',
             help='Method. Possible values: base, ')
@@ -123,7 +125,7 @@ def main():
                                       cg_dict['label'], cg_dict['pred'], cg_dict['train_idx'],
                                       prog_args, writer=writer, print_training=True)
         train_idx = cg_dict['train_idx']
-        explainer.explain(500, unconstrained=False)
+        explainer.explain(prog_args.explain_node, unconstrained=False)
 
         # explain a set of nodes
         #masked_adj = explainer.explain_nodes([i for i in range(300, 700, 5)])
@@ -132,7 +134,6 @@ def main():
         #print(masked_adj[3])
 
         
-
 if __name__ == "__main__":
     main()
 
