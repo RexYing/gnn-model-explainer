@@ -39,7 +39,16 @@ def perturb_new(graph_list, p):
         perturbed_graph_list.append(G)
     return perturbed_graph_list
 
-    
+   
+def perturb_join(G1, G2, n_pert_edges):
+    F = nx.compose(G1,G2)  
+    n_edges = 0
+    while n_edges < n_pert_edges:
+        node_1 = np.random.choice(G1.nodes())
+        node_2 = np.random.choice(G2.nodes())
+        F.add_edge(node_1, node_2)
+        n_edges += 1
+    return F 
 
 #####
 #
@@ -60,8 +69,41 @@ def gen_syn1(nb_shapes = 80, width_basis = 300, feature_generator=None):
     feature_generator.gen_node_features(G)
 
     name = basis_type + '_' + str(width_basis) + '_' + str(nb_shapes)
-
     return G, role_id, name
+
+def gen_syn2(N=5, n_classes=4):
+    basis_type = 'grid'
+
+    # Create two grids
+    G1 = nx.grid_graph(dim=[N,N])
+    G2 = nx.grid_graph(dim=[N,N])
+    # Edit node ids to avoid collisions on join
+    g1_map = {n:i for i,n in enumerate(G1.nodes())}
+    G1 = nx.relabel_nodes(G1, g1_map)
+    g2_map = {n:i+N**2 for i,n in enumerate(G2.nodes())}
+    G2 = nx.relabel_nodes(G2, g2_map)
+
+    # Create node features
+    mu_1, sigma_1 = 0, 0.5
+    com_choices_1 = [0,1]
+    feat_gen_G1 = featgen.GridFeatureGen(mu=mu_1, sigma=sigma_1, com_choices=com_choices_1)
+    communities_G1 = feat_gen_G1.gen_node_features(G1) 
+
+    mu_2, sigma_2 = 1, 0.5
+    com_choices_2 = [2,3]
+    feat_gen_G2 = featgen.GridFeatureGen(mu=mu_2, sigma=sigma_2, com_choices=com_choices_2)
+    communities_G2 = feat_gen_G2.gen_node_features(G2) 
+
+    # Join
+    n_pert_edges = int(np.log(N)) + 1; 
+    G = perturb_join(G1, G2, n_pert_edges)
+   
+    communities = {**communities_G1, **communities_G2}
+    communities = list(communities.values())
+    print(communities)
+    name = basis_type + '_N_' + str(N) + '_classes_' + str(n_classes) + '_pert_' + str(n_pert_edges)
+
+    return G, communities, name
 
 def preprocess_input_graph(G, labels, normalize_adj=False):
     adj = np.array(nx.to_numpy_matrix(G))
