@@ -114,7 +114,8 @@ def main():
 
         explainer = explain.Explainer(model, cg_dict['adj'], cg_dict['feat'],
                                       cg_dict['label'], cg_dict['pred'], cg_dict['train_idx'], prog_args, writer=writer)
-        explainer.explain(420, unconstrained=False)
+        explainer.explain(400, unconstrained=False)
 
 if __name__ == "__main__":
     main()
+

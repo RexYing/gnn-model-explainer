@@ -162,6 +162,8 @@ class Explainer:
     def log_representer(self, rep_val):
 
         rep_val = rep_val.cpu().detach().numpy()
+        sorted_rep = sorted(range(len(rep_val)), key=lambda k: rep_val[k])
+        print(sorted_rep)
         plt.switch_backend('agg')
         fig = plt.figure(figsize=(4,3), dpi=400)
         dat = [[i, rep_val[i]] for i in range(len(rep_val))]
@@ -259,6 +261,9 @@ class ExplainModule(nn.Module):
         self.model.zero_grad()
         self.adj.requires_grad = True
         self.x.requires_grad = True
+        if self.adj.grad is not None:
+            self.adj.grad.zero_()
+            self.x.grad.zero_()
         if self.args.gpu:
             adj = self.adj.cuda()
             x = self.x.cuda()
@@ -355,6 +360,7 @@ class ExplainModule(nn.Module):
 
     def log_adj_grad(self, node_idx, pred_label, epoch):
         adj_grad = torch.abs(self.adj_feat_grad(node_idx, pred_label[node_idx])[0])[self.graph_idx]
+        adj_grad = adj_grad + adj_grad.t()
         io_utils.log_matrix(self.writer, adj_grad, 'grad/adj', epoch)
         #self.adj.requires_grad = False
 
@@ -379,3 +385,4 @@ class ExplainModule(nn.Module):
         fig.axes[0].xaxis.set_visible(False)
         fig.canvas.draw()
         self.writer.add_image('mask/graph', tensorboardX.utils.figure_to_image(fig), epoch)
+
