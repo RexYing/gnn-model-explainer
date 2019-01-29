@@ -109,6 +109,7 @@ data/
 log/
 syn/
 ckpt/
+out/
 
 .idea/
 .vscode/

@@ -5,6 +5,7 @@ from tensorboardX import SummaryWriter
 
 import argparse
 import os
+import pickle
 import shutil
 
 import utils.io_utils as io_utils
@@ -93,7 +94,8 @@ def main():
     #if os.path.isdir(path):
     #    print('Remove existing log dir: ', path)
     #    shutil.rmtree(path)
-    writer = SummaryWriter(path)
+    #writer = SummaryWriter(path)
+    writer = None
 
     ckpt = io_utils.load_ckpt(prog_args)
     cg_dict = ckpt['cg']
@@ -113,8 +115,17 @@ def main():
         model.load_state_dict(ckpt['model_state'])
 
         explainer = explain.Explainer(model, cg_dict['adj'], cg_dict['feat'],
-                                      cg_dict['label'], cg_dict['pred'], cg_dict['train_idx'], prog_args, writer=writer)
+                                      cg_dict['label'], cg_dict['pred'], cg_dict['train_idx'],
+                                      prog_args, writer=writer, print_training=False)
         explainer.explain(400, unconstrained=False)
+
+        # explain a set of nodes
+        #masked_adj = explainer.explain_nodes([i for i in range(300, 700, 5)])
+        #pickle.dump(masked_adj, open('out/masked_adjs.pkl', 'wb'))
+
+        #print(masked_adj[3])
+
+        
 
 if __name__ == "__main__":
     main()

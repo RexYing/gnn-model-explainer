@@ -55,7 +55,8 @@ def numpy_to_torch(img, requires_grad=True):
     return v
 
 class Explainer:
-    def __init__(self, model, adj, feat, label, pred, train_idx, args, writer=None):
+    def __init__(self, model, adj, feat, label, pred, train_idx, args, writer=None,
+            print_training=True):
         self.model = model
         self.model.eval()
         self.adj = adj
@@ -67,6 +68,7 @@ class Explainer:
         self.neighborhoods = self._neighborhoods()
         self.args = args
         self.writer = writer
+        self.print_training = print_training
 
         self.representer()
 
@@ -128,7 +130,8 @@ class Explainer:
         f_idx = self.embedding[graph_idx, self.train_idx, :]
         alpha = self.alpha[graph_idx, self.train_idx]
         rep_val = (f_idx @ f_test) * alpha
-        self.log_representer(rep_val)
+        if self.writer is not None:
+            self.log_representer(rep_val)
 
         explainer = ExplainModule(adj, x, self.model, label, self.args, writer=self.writer)
         if self.args.gpu:
@@ -147,9 +150,10 @@ class Explainer:
                 explainer.scheduler.step()
 
             mask_density = explainer.mask_density()
-            print('epoch: ', epoch, '; loss: ', loss.item(),
-                  '; mask density: ', mask_density.item(),
-                  '; pred: ', ypred)
+            if self.print_training:
+                print('epoch: ', epoch, '; loss: ', loss.item(),
+                      '; mask density: ', mask_density.item(),
+                      '; pred: ', ypred)
 
             if self.writer is not None:
                 self.writer.add_scalar('mask/density', mask_density, epoch)
@@ -159,11 +163,20 @@ class Explainer:
                     explainer.log_masked_adj(epoch)
                     explainer.log_adj_grad(node_idx_new, pred_label, epoch)
 
+        masked_adj = explainer.masked_adj[0].cpu().detach().numpy()
+        return masked_adj
+
+    def explain_nodes(self, node_indices, graph_idx=0):
+        masked_adjs = [self.explain(node_idx, graph_idx=graph_idx) for node_idx in node_indices]
+        return masked_adjs
+
     def log_representer(self, rep_val):
 
         rep_val = rep_val.cpu().detach().numpy()
         sorted_rep = sorted(range(len(rep_val)), key=lambda k: rep_val[k])
         print(sorted_rep)
+        most_pos_idx = [sorted_rep[i] for i in range(3)]
+
         plt.switch_backend('agg')
         fig = plt.figure(figsize=(4,3), dpi=400)
         dat = [[i, rep_val[i]] for i in range(len(rep_val))]
