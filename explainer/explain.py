@@ -183,8 +183,6 @@ class Explainer:
         ref_adj = torch.FloatTensor(ref_adj)
         curr_adj = torch.FloatTensor(curr_adj)
 
-        #print("FROM", from_feat.shape, from_adj.shape)
-        #print("TO", to_feat.shape, to_adj.shape)
         ref_feat = torch.FloatTensor(ref_feat)
         curr_feat = torch.FloatTensor(curr_feat) 
 
@@ -193,6 +191,7 @@ class Explainer:
         with torch.no_grad():
             nn.init.constant_(P, 1.0/ref_adj.shape[0])
         opt = torch.optim.Adam([P], lr=.01, betas=(0.5, 0.999))
+        io_utils.log_matrix(self.writer, P, 'align/P', 0)
         for i in range(args.align_steps):
             opt.zero_grad()
             feat_loss  = torch.norm(P @ curr_feat - ref_feat)
@@ -214,12 +213,22 @@ class Explainer:
         curr_adj = masked_adjs[1]
         new_ref_idx, _, ref_feat,_,_ = self.extract_neighborhood(ref_idx)
         new_curr_idx, _, curr_feat,_,_   = self.extract_neighborhood(curr_idx)
-        P, aligned_adj, aligned_feat = self.align(ref_feat, ref_adj,
-                curr_feat, curr_adj, args=args)
-        io_utils.log_graph(self.writer, ref_adj, new_ref_idx, 'align/ref')
-        io_utils.log_graph(self.writer, curr_adj, new_curr_idx, 'align/before')
-        io_utils.log_graph(self.writer, aligned_adj.cpu().detach().numpy(), new_curr_idx,
-                'align/from', epoch=1)
+
+        G_ref = io_utils.denoise_graph(ref_adj, new_ref_idx, ref_feat, threshold=0.5)
+        denoised_ref_feat = np.array([G_ref.node[node]['feat'] for node in G_ref.nodes()])
+        denoised_ref_adj = nx.to_numpy_matrix(G_ref)
+
+        G_curr = io_utils.denoise_graph(curr_adj, new_curr_idx, ref_feat, threshold=0.5)
+        denoised_curr_feat = np.array([G_curr.node[node]['feat'] for node in G_curr.nodes()])
+        denoised_curr_adj = nx.to_numpy_matrix(G_curr)
+
+        P, aligned_adj, aligned_feat = self.align(denoised_ref_feat, denoised_ref_adj,
+                denoised_curr_feat, denoised_curr_adj, args=args)
+
+        io_utils.log_graph(self.writer, G_ref, 'align/ref')
+        io_utils.log_graph(self.writer, G_curr, 'align/before')
+        #io_utils.log_graph(self.writer, aligned_adj.cpu().detach().numpy(), new_curr_idx,
+        #        'align/aligned', epoch=1)
 
         return masked_adjs
 
@@ -312,7 +321,7 @@ class ExplainModule(nn.Module):
 
         self.scheduler, self.optimizer = train_utils.build_optimizer(args, params)
 
-        self.coeffs = {'size': 0.5, 'feat_size': 0.1, 'ent': 0.1,
+        self.coeffs = {'size': 5, 'feat_size': 0.1, 'ent': 0.1,
                 'feat_ent':0.1, 'grad': 0, 'lap': 1.0}
 
         # ypred = self.model(x, adj)[graph_idx][node_idx]
@@ -503,7 +512,8 @@ class ExplainModule(nn.Module):
     def log_masked_adj(self, node_idx, epoch):
         # use [0] to remove the batch dim
         masked_adj = self.masked_adj[0].cpu().detach().numpy()
-        io_utils.log_graph(self.writer, masked_adj, node_idx, name='mask/graph', epoch=epoch)
+        G = io_utils.denoise_graph(masked_adj, node_idx)
+        io_utils.log_graph(self.writer, G, name='mask/graph', epoch=epoch)
         #num_nodes = self.adj.size()[-1]
         #G = nx.Graph()
         #G.add_nodes_from(range(num_nodes))
