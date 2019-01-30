@@ -378,10 +378,10 @@ class ExplainModule(nn.Module):
 
         # entropy
         mask_ent = -mask * torch.log(mask) - (1-mask) * torch.log(1-mask)
-        mask_ent_loss = self.coeffs['ent'] * torch.mean(mask_ent_loss)
+        mask_ent_loss = self.coeffs['ent'] * torch.mean(mask_ent)
 
         feat_mask_ent = -feat_mask * torch.log(feat_mask) - (1-feat_mask) * torch.log(1-feat_mask)
-        feat_mask_ent_loss = self.coeffs['feat_ent'] * torch.mean(feat_mask_ent_loss)
+        feat_mask_ent_loss = self.coeffs['feat_ent'] * torch.mean(feat_mask_ent)
 
 
         # laplacian
