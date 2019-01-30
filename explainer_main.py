@@ -132,7 +132,7 @@ def main():
 #        explainer.explain(prog_args.explain_node, unconstrained=False)
 
         # explain a set of nodes
-        masked_adj = explainer.explain_nodes([420,430], prog_args)
+        masked_adj = explainer.explain_nodes([420,440], prog_args)
         #pickle.dump(masked_adj, open('out/masked_adjs.pkl', 'wb'))
 
         #print(masked_adj[3])

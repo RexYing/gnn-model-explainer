@@ -176,6 +176,9 @@ class Explainer:
         masked_adj = explainer.masked_adj[0].cpu().detach().numpy()
         return masked_adj
 
+    def remove_low_weight_edges(self):
+        d
+
     def align(self, from_idx, from_adj, to_idx, to_adj, args):
         adj0 = torch.FloatTensor(from_adj)
         adj1 = torch.FloatTensor(to_adj)
@@ -195,14 +198,21 @@ class Explainer:
           align_loss = torch.norm(P @ adj1 @ torch.transpose(P,0,1) - adj0)
           loss =  feat_loss + align_loss
           loss.backward() # Calculate gradients
+          print('iter: ', i, '; loss: ', loss)
           opt.step()
 
-        return P
+        return P, P @ adj1, P @ feat1
 
     def explain_nodes(self, node_indices, args, graph_idx=0):
         masked_adjs = [self.explain(node_idx, graph_idx=graph_idx) for node_idx in node_indices]
-        self.align(from_idx=node_indices[0], from_adj=masked_adjs[0], to_idx=node_indices[1], to_adj=masked_adjs[1], args=args)
+        P, aligned_adj, aligned_feat = self.align(from_idx=node_indices[0], from_adj=masked_adjs[0], to_idx=node_indices[1], to_adj=masked_adjs[1], args=args)
+        io_utils.log_graph(self.writer, from_adj, 'align/ref')
+        self.log_aligned_nodes(aligned_adj, 1)
+
         return masked_adjs
+
+    def log_aligned_nodes(self, aligned_adj, idx):
+        io_utils.log_graph(self.writer, aligned_adj.cpu().detach().numpy(), 'align/adj', epoch=idx)
 
     def log_representer(self, rep_val, sim_val, alpha, graph_idx=0):
 
