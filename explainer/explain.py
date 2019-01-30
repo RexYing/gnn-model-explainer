@@ -269,7 +269,7 @@ class ExplainModule(nn.Module):
 
         self.scheduler, self.optimizer = train_utils.build_optimizer(args, params)
 
-        self.coeffs = {'size': 0.5, 'feat_size': 0.1, 'ent': 0.1,
+        self.coeffs = {'size': 4.0, 'feat_size': 0.1, 'ent': 0.5,
                 'feat_ent':0.1, 'grad': 0, 'lap': 1.0}
 
         # ypred = self.model(x, adj)[graph_idx][node_idx]
@@ -428,6 +428,15 @@ class ExplainModule(nn.Module):
         plt.tight_layout()
         fig.canvas.draw()
         self.writer.add_image('mask/mask', tensorboardX.utils.figure_to_image(fig), epoch)
+
+        fig = plt.figure(figsize=(4,3), dpi=400)
+        plt.imshow(self.feat_mask.cpu().detach().numpy(), cmap=plt.get_cmap('BuPu'))
+        cbar = plt.colorbar()
+        cbar.solids.set_edgecolor("face")
+
+        plt.tight_layout()
+        fig.canvas.draw()
+        self.writer.add_image('mask/feat_mask', tensorboardX.utils.figure_to_image(fig), epoch)
 
         fig = plt.figure(figsize=(4,3), dpi=400)
         # use [0] to remove the batch dim
