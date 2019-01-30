@@ -61,6 +61,8 @@ def arg_parse():
             help='Whether to add bias. Default to True.')
     parser.add_argument('--explain-node', dest='explain_node', type=int,
             help='Node to explain.')
+    parser.add_argument('--align_steps', dest='align_steps', type=int,
+            help='Number of iterations to find P, the alignment matrix.')
 
     parser.add_argument('--method', dest='method',
             help='Method. Possible values: base, ')
@@ -83,6 +85,7 @@ def arg_parse():
                         dropout=0.0,
                         method='base',
                         name_suffix='',
+                        align_steps=1000,
                         explain_node=420
                        )
     return parser.parse_args()
@@ -129,7 +132,7 @@ def main():
 #        explainer.explain(prog_args.explain_node, unconstrained=False)
 
         # explain a set of nodes
-        masked_adj = explainer.explain_nodes([420,430])
+        masked_adj = explainer.explain_nodes([420,430], prog_args)
         #pickle.dump(masked_adj, open('out/masked_adjs.pkl', 'wb'))
 
         #print(masked_adj[3])

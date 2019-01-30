@@ -176,7 +176,7 @@ class Explainer:
         masked_adj = explainer.masked_adj[0].cpu().detach().numpy()
         return masked_adj
 
-    def align(self, from_idx, from_adj, to_idx, to_adj):
+    def align(self, from_idx, from_adj, to_idx, to_adj, args):
         adj0 = torch.FloatTensor(from_adj)
         adj1 = torch.FloatTensor(to_adj)
 
@@ -189,7 +189,7 @@ class Explainer:
 
         P = torch.randn(adj0.shape[0], adj1.shape[0], requires_grad=True)
         opt = torch.optim.Adam([P], lr=.01, betas=(0.5, 0.999))
-        for i in range(1000):
+        for i in range(args.align_steps):
           opt.zero_grad()
           feat_loss  = torch.norm(P @ feat1 - feat0)
           align_loss = torch.norm(P @ adj1 @ torch.transpose(P,0,1) - adj0)
@@ -197,12 +197,11 @@ class Explainer:
           loss.backward() # Calculate gradients
           opt.step()
 
-        print(P)
+        return P
 
-
-    def explain_nodes(self, node_indices, graph_idx=0):
+    def explain_nodes(self, node_indices, args, graph_idx=0):
         masked_adjs = [self.explain(node_idx, graph_idx=graph_idx) for node_idx in node_indices]
-        self.align(from_idx=node_indices[0], from_adj=masked_adjs[0], to_idx=node_indices[1], to_adj=masked_adjs[1])
+        self.align(from_idx=node_indices[0], from_adj=masked_adjs[0], to_idx=node_indices[1], to_adj=masked_adjs[1], args=args)
         return masked_adjs
 
     def log_representer(self, rep_val, sim_val, alpha, graph_idx=0):
