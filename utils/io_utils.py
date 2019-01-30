@@ -88,7 +88,7 @@ def log_graph(writer, Gc, name, epoch=0, fig_size=(4,3), dpi=300):
     plt.switch_backend('agg')
     fig = plt.figure(figsize=fig_size, dpi=dpi)
    
-    edge_colors = [Gc[i][j]['weight'] for (i,j) in Gc.edges()]
+    edge_colors = [min(max(Gc[i][j]['weight'],0.0),1.0) for (i,j) in Gc.edges()]
     node_colors = [Gc.node[i]['color'] if 'color' in Gc.node[i] else 1 for i in Gc.nodes()]
 
     plt.switch_backend('agg')
@@ -98,9 +98,10 @@ def log_graph(writer, Gc, name, epoch=0, fig_size=(4,3), dpi=300):
             edge_color=edge_colors, edge_cmap=plt.get_cmap('Greys'), edge_vmin=0.0, edge_vmax=1.0,
             width=0.5, node_size=25,
             alpha=0.7)
-    #plt.imshow(np.random.rand(5,5), cmap=plt.get_cmap('BuPu'))
     fig.axes[0].xaxis.set_visible(False)
     fig.canvas.draw()
-    writer.add_image(name, tensorboardX.utils.figure_to_image(fig), epoch)
+    plt.savefig('log/' + name)
+    img = tensorboardX.utils.figure_to_image(fig)
+    writer.add_image(name, img, epoch)
 
 

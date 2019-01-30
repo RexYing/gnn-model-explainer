@@ -61,7 +61,7 @@ def arg_parse():
             help='Whether to add bias. Default to True.')
     parser.add_argument('--explain-node', dest='explain_node', type=int,
             help='Node to explain.')
-    parser.add_argument('--align_steps', dest='align_steps', type=int,
+    parser.add_argument('--align-steps', dest='align_steps', type=int,
             help='Number of iterations to find P, the alignment matrix.')
 
     parser.add_argument('--method', dest='method',

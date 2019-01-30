@@ -179,7 +179,7 @@ class Explainer:
     def remove_low_weight_edges(self):
         d
 
-    def align(self, ref_feat, ref_adj, curr_feat, curr_adj, args):
+    def align(self, ref_feat, ref_adj, ref_node_idx, curr_feat, curr_adj, curr_node_idx, args):
         ref_adj = torch.FloatTensor(ref_adj)
         curr_adj = torch.FloatTensor(curr_adj)
 
@@ -190,8 +190,10 @@ class Explainer:
         P = nn.Parameter(torch.FloatTensor(ref_adj.shape[0], curr_adj.shape[0]))
         with torch.no_grad():
             nn.init.constant_(P, 1.0/ref_adj.shape[0])
+            P[ref_node_idx, :] = 0.0
+            P[:, curr_node_idx] = 0.0
+            P[ref_node_idx, curr_node_idx] = 1.0
         opt = torch.optim.Adam([P], lr=.01, betas=(0.5, 0.999))
-        io_utils.log_matrix(self.writer, P, 'align/P', 0)
         for i in range(args.align_steps):
             opt.zero_grad()
             feat_loss  = torch.norm(P @ curr_feat - ref_feat)
@@ -214,19 +216,37 @@ class Explainer:
         new_ref_idx, _, ref_feat,_,_ = self.extract_neighborhood(ref_idx)
         new_curr_idx, _, curr_feat,_,_   = self.extract_neighborhood(curr_idx)
 
-        G_ref = io_utils.denoise_graph(ref_adj, new_ref_idx, ref_feat, threshold=0.5)
+        G_ref = io_utils.denoise_graph(ref_adj, new_ref_idx, ref_feat, threshold=0.1)
         denoised_ref_feat = np.array([G_ref.node[node]['feat'] for node in G_ref.nodes()])
         denoised_ref_adj = nx.to_numpy_matrix(G_ref)
+        # ref center node
+        ref_node_idx = list(G_ref.nodes()).index(new_ref_idx)
 
-        G_curr = io_utils.denoise_graph(curr_adj, new_curr_idx, ref_feat, threshold=0.5)
+        G_curr = io_utils.denoise_graph(curr_adj, new_curr_idx, curr_feat, threshold=0.1)
         denoised_curr_feat = np.array([G_curr.node[node]['feat'] for node in G_curr.nodes()])
         denoised_curr_adj = nx.to_numpy_matrix(G_curr)
+        # curr center node
+        curr_node_idx = list(G_curr.nodes()).index(new_curr_idx)
 
-        P, aligned_adj, aligned_feat = self.align(denoised_ref_feat, denoised_ref_adj,
-                denoised_curr_feat, denoised_curr_adj, args=args)
+        P, aligned_adj, aligned_feat = self.align(denoised_ref_feat, denoised_ref_adj, ref_node_idx,
+                denoised_curr_feat, denoised_curr_adj, curr_node_idx, args=args)
+        io_utils.log_matrix(self.writer, P, 'align/P', 0)
 
+        G_ref = nx.convert_node_labels_to_integers(G_ref)
         io_utils.log_graph(self.writer, G_ref, 'align/ref')
+        G_curr = nx.convert_node_labels_to_integers(G_curr)
         io_utils.log_graph(self.writer, G_curr, 'align/before')
+
+        P = P.cpu().detach().numpy()
+        aligned_adj = aligned_adj.cpu().detach().numpy()
+        aligned_feat = aligned_feat.cpu().detach().numpy()
+
+        aligned_idx = np.argmax(P[:, curr_node_idx])
+        #print(list(G_curr.nodes()))
+        print('aligned self: ', aligned_idx)
+        G_aligned = io_utils.denoise_graph(aligned_adj, aligned_idx, aligned_feat, threshold=0.5)
+        io_utils.log_graph(self.writer, G_aligned, 'mask/aligned')
+        
         #io_utils.log_graph(self.writer, aligned_adj.cpu().detach().numpy(), new_curr_idx,
         #        'align/aligned', epoch=1)
 
@@ -482,7 +502,8 @@ class ExplainModule(nn.Module):
         self.writer.add_image('mask/mask', tensorboardX.utils.figure_to_image(fig), epoch)
 
         fig = plt.figure(figsize=(4,3), dpi=400)
-        plt.imshow(self.feat_mask.cpu().detach().numpy(), cmap=plt.get_cmap('BuPu'))
+        feat_mask = np.expand_dims(self.feat_mask.cpu().detach().numpy(), axis=1)
+        plt.imshow(feat_mask, cmap=plt.get_cmap('BuPu'))
         cbar = plt.colorbar()
         cbar.solids.set_edgecolor("face")
 
