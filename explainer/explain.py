@@ -502,8 +502,7 @@ class ExplainModule(nn.Module):
         self.writer.add_image('mask/mask', tensorboardX.utils.figure_to_image(fig), epoch)
 
         fig = plt.figure(figsize=(4,3), dpi=400)
-        feat_mask = np.expand_dims(self.feat_mask.cpu().detach().numpy(), axis=1)
-        plt.imshow(feat_mask, cmap=plt.get_cmap('BuPu'))
+        plt.imshow(self.feat_mask.cpu().detach().numpy()[:,np.newaxis], cmap=plt.get_cmap('BuPu'))
         cbar = plt.colorbar()
         cbar.solids.set_edgecolor("face")
 
