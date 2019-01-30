@@ -258,7 +258,8 @@ class ExplainModule(nn.Module):
         init_strategy='normal'
         num_nodes = adj.size()[1]
         self.mask, self.mask_bias = self.construct_edge_mask(num_nodes, init_strategy=init_strategy)
-        params = [self.mask]
+        self.feat_mask = self.construct_feat_mask(x.size(-1))
+        params = [self.mask, self.feat_mask]
         if self.mask_bias is not None:
             params.append(self.mask_bias)
         # For masking diagonal entries
@@ -268,7 +269,7 @@ class ExplainModule(nn.Module):
 
         self.scheduler, self.optimizer = train_utils.build_optimizer(args, params)
 
-        self.coeffs = {'size': 0.5, 'grad': 0, 'lap': 1.0}
+        self.coeffs = {'size': 0.5, 'feat_size': 0.1, 'grad': 0, 'lap': 1.0}
 
         # ypred = self.model(x, adj)[graph_idx][node_idx]
         # print('rerun pred: ', ypred)
@@ -276,12 +277,20 @@ class ExplainModule(nn.Module):
         # ypred = self.model(x, masked_adj)
         # print('init mask pred: ', ypred[graph_idx][node_idx])
 
+    def construct_feat_mask(self, feat_dim, init_strategy='normal'):
+        mask = nn.Parameter(torch.FloatTensor(feat_dim))
+        if init_strategy == 'normal':
+            std = nn.init.calculate_gain('relu') * math.sqrt(2.0 / (num_nodes + num_nodes))
+            with torch.no_grad():
+                mask.normal_(1.0, std)
+        return mask
+
     def construct_edge_mask(self, num_nodes, init_strategy='normal', const_val=1.0):
         mask = nn.Parameter(torch.FloatTensor(num_nodes, num_nodes))
         if init_strategy == 'normal':
             std = nn.init.calculate_gain('relu') * math.sqrt(2.0 / (num_nodes + num_nodes))
             with torch.no_grad():
-                mask.normal_(0.5, std)
+                mask.normal_(1.0, std)
                 #mask.clamp_(0.0, 1.0)
         elif init_strategy == 'const':
             nn.init.constant_(mask, const_val)
@@ -296,6 +305,7 @@ class ExplainModule(nn.Module):
 
     def _masked_adj(self):
         sym_mask = torch.sigmoid(self.mask) if self.use_sigmoid else self.mask
+        #sym_mask = nn.ReLU()(self.mask) if self.use_sigmoid else self.mask
         sym_mask = (sym_mask + sym_mask.t()) / 2
         adj = self.adj.cuda() if self.args.gpu else self.adj
         masked_adj = adj * sym_mask
@@ -314,11 +324,14 @@ class ExplainModule(nn.Module):
         if unconstrained:
             sym_mask = torch.sigmoid(self.mask) if self.use_sigmoid else self.mask
             self.masked_adj = torch.unsqueeze((sym_mask + sym_mask.t()) / 2, 0) * self.diag_mask
+            x = self.x
         else:
             self.masked_adj = self._masked_adj()
+            mask = torch.sigmoid(self.feat_mask) if self.use_sigmoid else self.feat_mask
+            x = self.x * mask
 
         if self.args.gpu:
-            x = self.x.cuda()
+            x = x.cuda()
             masked_adj = self.masked_adj.cuda()
         else:
             x, masked_adj = self.x, self.masked_adj
@@ -360,9 +373,18 @@ class ExplainModule(nn.Module):
 
         # size
         mask = torch.sigmoid(self.mask) if self.use_sigmoid else self.mask
+        #mask = nn.ReLU()(self.mask) if self.use_sigmoid else self.mask
         size_loss = self.coeffs['size'] * torch.mean(mask)
 
+        feat_mask = torch.sigmoid(self.feat_mask) if self.use_sigmoid else self.feat_mask
+        feat_size_loss = self.coeffs['feat_size'] * torch.mean(feat_mask)
+
         # entropy
+        mask_ent = -mask * torch.log(mask) - (1-mask) * torch.log(1-mask)
+        mask_ent_loss = self.coeffs['ent'] * torch.mean(mask_ent_loss)
+
+        feat_mask_ent = -feat_mask * torch.log(feat_mask) - (1-feat_mask) * torch.log(1-feat_mask)
+
 
         # laplacian
         D = torch.diag(torch.sum(self.masked_adj[0], 0))
@@ -389,6 +411,8 @@ class ExplainModule(nn.Module):
         loss = pred_loss + size_loss + lap_loss
         if self.writer is not None:
             self.writer.add_scalar('optimization/size_loss', size_loss, epoch)
+            self.writer.add_scalar('optimization/feat_size_loss', feat_size_loss, epoch)
+            self.writer.add_scalar('optimization/mask_ent_loss', mask_ent_loss, epoch)
             #self.writer.add_scalar('optimization/grad_loss', grad_loss, epoch)
             self.writer.add_scalar('optimization/pred_loss', pred_loss, epoch)
             self.writer.add_scalar('optimization/lap_loss', lap_loss, epoch)
@@ -441,7 +465,7 @@ class ExplainModule(nn.Module):
         G = nx.Graph()
         G.add_nodes_from(range(num_nodes))
         G.node[node_idx]['color'] = 0
-        weighted_edge_list = [(i, j, masked_adj[i, j]) for i in range(num_nodes) for j in range(num_nodes) if masked_adj[i,j] > 0.01]
+        weighted_edge_list = [(i, j, masked_adj[i, j]) for i in range(num_nodes) for j in range(num_nodes) if masked_adj[i,j] > 0.1]
         G.add_weighted_edges_from(weighted_edge_list)
         Gc = max(nx.connected_component_subgraphs(G), key=len)
         edge_colors = [Gc[i][j]['weight'] for (i,j) in Gc.edges()]

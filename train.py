@@ -405,14 +405,15 @@ def syn_task1(args, writer=None):
 
 def syn_task2(args, writer=None):
     # data
-    num_classes = 4 
-    G, labels, name = gengraph.gen_syn2(n_classes=num_classes)
+    G, labels, name = gengraph.gen_syn2()
+    input_dim = len(G.node[0]['feat'])
+    num_classes = max(labels)+1
 
     if args.method == 'attn':
         print('Method: attn')
     else:
         print('Method: base')
-        model = models.GcnEncoderNode(2, args.hidden_dim, args.output_dim, num_classes,
+        model = models.GcnEncoderNode(input_dim, args.hidden_dim, args.output_dim, num_classes,
                                        args.num_gc_layers, bn=args.bn, args=args)
         if args.gpu:
             model = model.cuda()

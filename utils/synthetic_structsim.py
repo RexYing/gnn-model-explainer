@@ -205,7 +205,8 @@ def path(start, width, role_start=0):
     return graph, roles
 
 
-def build_graph(width_basis, basis_type, list_shapes, start=0, rdm_basis_plugins=False, add_random_edges=0):
+def build_graph(width_basis, basis_type, list_shapes, start=0, rdm_basis_plugins=False,
+        add_random_edges=0, m=5):
     '''This function creates a basis (scale-free, path, or cycle)
     and attaches elements of the type in the list randomly along the basis.
     Possibility to add random edges afterwards.
@@ -220,13 +221,14 @@ def build_graph(width_basis, basis_type, list_shapes, start=0, rdm_basis_plugins
     rdm_basis_plugins:      boolean. Should the shapes be randomly placed
                             along the basis (True) or regularly (False)?
     add_random_edges :      nb of edges to randomly add on the structure
+    m                :      number of edges to attach to existing node (for BA graph)
     OUTPUT:
     --------------------------------------------------------------------------------------
     basis            :      a nx graph with the particular shape
     role_ids         :      labels for each role
     plugins          :      node ids with the attached shapes
     '''
-    basis, role_id = eval(basis_type)(start, width_basis)
+    basis, role_id = eval(basis_type)(start, width_basis, m=m)
     n_basis, n_shapes = nx.number_of_nodes(basis), len(list_shapes)
     start += n_basis        # indicator of the id of the next node
 

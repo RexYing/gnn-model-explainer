@@ -40,7 +40,7 @@ def perturb_new(graph_list, p):
     return perturbed_graph_list
 
    
-def perturb_join(G1, G2, n_pert_edges):
+def join_graph(G1, G2, n_pert_edges):
     F = nx.compose(G1,G2)  
     n_edges = 0
     while n_edges < n_pert_edges:
@@ -55,13 +55,14 @@ def perturb_join(G1, G2, n_pert_edges):
 # Generate input graph
 #
 #####
-def gen_syn1(nb_shapes = 80, width_basis = 300, feature_generator=None):
+def gen_syn1(nb_shapes = 80, width_basis = 300, feature_generator=None, m=5):
     basis_type = 'ba'
     list_shapes = [['house']] * nb_shapes
 
     fig = plt.figure(figsize=(8,6), dpi=300)
 
-    G, role_id, plugins = synthetic_structsim.build_graph(width_basis, basis_type, list_shapes, start=0)
+    G, role_id, plugins = synthetic_structsim.build_graph(width_basis, basis_type, list_shapes,
+            start=0, m=5)
     G = perturb_new([G], 0.01)[0]
 
     if feature_generator is None:
@@ -71,39 +72,50 @@ def gen_syn1(nb_shapes = 80, width_basis = 300, feature_generator=None):
     name = basis_type + '_' + str(width_basis) + '_' + str(nb_shapes)
     return G, role_id, name
 
-def gen_syn2(N=5, n_classes=4):
-    basis_type = 'grid'
+def gen_syn2(nb_shapes = 100, width_basis = 350):
+    basis_type = 'ba'
 
     # Create two grids
-    G1 = nx.grid_graph(dim=[N,N])
-    G2 = nx.grid_graph(dim=[N,N])
+    mu_1, sigma_1 = np.array([0, 0]), np.array([0.5, 1])
+    mu_2, sigma_2 = np.array([1, 0]), np.array([0.5, 1])
+    feat_gen_G1 = featgen.GaussianFeatureGen(mu=mu_1, sigma=sigma_1)
+    feat_gen_G2 = featgen.GaussianFeatureGen(mu=mu_2, sigma=sigma_2)
+    G1, role_id1, name = gen_syn1(feature_generator=feat_gen_G1, m=4)
+    G2, role_id2, name = gen_syn1(feature_generator=feat_gen_G2, m=4)
+    G1_size = G1.number_of_nodes()
+    num_roles = max(role_id1) + 1
+    role_id2 = [r + num_roles for r in role_id2]
+    label = role_id1 + role_id2
+    
+    #G1 = nx.grid_graph(dim=[N,N])
+    #G2 = nx.grid_graph(dim=[N,N])
     # Edit node ids to avoid collisions on join
     g1_map = {n:i for i,n in enumerate(G1.nodes())}
     G1 = nx.relabel_nodes(G1, g1_map)
-    g2_map = {n:i+N**2 for i,n in enumerate(G2.nodes())}
+    g2_map = {n:i+G1_size for i,n in enumerate(G2.nodes())}
     G2 = nx.relabel_nodes(G2, g2_map)
 
     # Create node features
-    mu_1, sigma_1 = 0, 0.5
-    com_choices_1 = [0,1]
-    feat_gen_G1 = featgen.GridFeatureGen(mu=mu_1, sigma=sigma_1, com_choices=com_choices_1)
-    communities_G1 = feat_gen_G1.gen_node_features(G1) 
+    #com_choices_1 = [0,1]
+    #feat_gen_G1 = featgen.GridFeatureGen(mu=mu_1, sigma=sigma_1, com_choices=com_choices_1)
+    #communities_G1 = feat_gen_G1.gen_node_features(G1) 
 
-    mu_2, sigma_2 = 1, 0.5
-    com_choices_2 = [2,3]
-    feat_gen_G2 = featgen.GridFeatureGen(mu=mu_2, sigma=sigma_2, com_choices=com_choices_2)
-    communities_G2 = feat_gen_G2.gen_node_features(G2) 
+    #com_choices_2 = [2,3]
+    #feat_gen_G2 = featgen.GridFeatureGen(mu=mu_2, sigma=sigma_2, com_choices=com_choices_2)
+    #communities_G2 = feat_gen_G2.gen_node_features(G2) 
 
     # Join
-    n_pert_edges = int(np.log(N)) + 1; 
-    G = perturb_join(G1, G2, n_pert_edges)
+    #n_pert_edges = int(np.log(N)) + 1; 
+    n_pert_edges = width_basis
+    G = join_graph(G1, G2, n_pert_edges)
    
-    communities = {**communities_G1, **communities_G2}
-    communities = list(communities.values())
-    print(communities)
-    name = basis_type + '_N_' + str(N) + '_classes_' + str(n_classes) + '_pert_' + str(n_pert_edges)
+    #communities = {**communities_G1, **communities_G2}
+    #communities = list(communities.values())
+    #print(label)
+    #name = basis_type + '_N_' + str(N) + '_classes_' + str(n_classes) + '_pert_' + str(n_pert_edges)
+    name = basis_type + '_' + str(width_basis) + '_' + str(nb_shapes) + '_2comm'
 
-    return G, communities, name
+    return G, label, name
 
 def preprocess_input_graph(G, labels, normalize_adj=False):
     adj = np.array(nx.to_numpy_matrix(G))
@@ -123,7 +135,8 @@ def preprocess_input_graph(G, labels, normalize_adj=False):
     return {'adj': adj, 'feat': f, 'labels': labels}
 
 if __name__ == "__main__":
-    G, labels, name = gen_syn1(feature_generator=featgen.ConstFeatureGen(np.ones(5, dtype=float)))
+    #G, labels, name = gen_syn1(feature_generator=featgen.ConstFeatureGen(np.ones(5, dtype=float)))
+    G, labels, name = gen_syn2()
 
     fig = plt.figure(figsize=(8,6), dpi=300)
     labels_dict = {i:labels[i] for i in range(G.number_of_nodes()) if not labels[i]==0}

@@ -19,10 +19,13 @@ class ConstFeatureGen(FeatureGen):
 class GaussianFeatureGen(FeatureGen):
     def __init__(self, mu, sigma):
         self.mu = mu
-        self.sigma = sigma
+        if sigma.ndim < 2:
+            self.sigma = np.diag(sigma)
+        else:
+            self.sigma = sigma
 
     def gen_node_features(self, G):
-        feat = np.random.multivariate_normal(mu, sigma, G.number_of_nodes())
+        feat = np.random.multivariate_normal(self.mu, self.sigma, G.number_of_nodes())
         feat_dict = {i:{'feat': feat[i]} for i in range(feat.shape[0])}
         nx.set_node_attributes(G, feat_dict)
 
@@ -44,3 +47,4 @@ class GridFeatureGen(FeatureGen):
 
         nx.set_node_attributes(G, feat_dict)
         return community_dict
+
