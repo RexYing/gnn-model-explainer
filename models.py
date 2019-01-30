@@ -81,9 +81,9 @@ class GcnEncoderGraph(nn.Module):
 
         for m in self.modules():
             if isinstance(m, GraphConv):
-                m.weight.data = init.xavier_uniform(m.weight.data, gain=nn.init.calculate_gain('relu'))
+                init.xavier_uniform_(m.weight.data, gain=nn.init.calculate_gain('relu'))
                 if m.bias is not None:
-                    m.bias.data = init.constant(m.bias.data, 0.0)
+                    init.constant_(m.bias.data, 0.0)
 
     def build_conv_layers(self, input_dim, hidden_dim, embedding_dim, num_layers, add_self,
             normalize=False, dropout=0.0):

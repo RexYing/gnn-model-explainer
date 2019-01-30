@@ -269,7 +269,8 @@ class ExplainModule(nn.Module):
 
         self.scheduler, self.optimizer = train_utils.build_optimizer(args, params)
 
-        self.coeffs = {'size': 0.5, 'feat_size': 0.1, 'grad': 0, 'lap': 1.0}
+        self.coeffs = {'size': 0.5, 'feat_size': 0.1, 'ent': 0.1,
+                'feat_ent':0.1, 'grad': 0, 'lap': 1.0}
 
         # ypred = self.model(x, adj)[graph_idx][node_idx]
         # print('rerun pred: ', ypred)
@@ -280,7 +281,7 @@ class ExplainModule(nn.Module):
     def construct_feat_mask(self, feat_dim, init_strategy='normal'):
         mask = nn.Parameter(torch.FloatTensor(feat_dim))
         if init_strategy == 'normal':
-            std = nn.init.calculate_gain('relu') * math.sqrt(2.0 / (num_nodes + num_nodes))
+            std = 0.1
             with torch.no_grad():
                 mask.normal_(1.0, std)
         return mask
@@ -321,21 +322,17 @@ class ExplainModule(nn.Module):
         return mask_sum / adj_sum
 
     def forward(self, node_idx, unconstrained=False):
+        x = self.x.cuda() if self.args.gpu else self.x
+
         if unconstrained:
             sym_mask = torch.sigmoid(self.mask) if self.use_sigmoid else self.mask
             self.masked_adj = torch.unsqueeze((sym_mask + sym_mask.t()) / 2, 0) * self.diag_mask
-            x = self.x
         else:
             self.masked_adj = self._masked_adj()
-            mask = torch.sigmoid(self.feat_mask) if self.use_sigmoid else self.feat_mask
-            x = self.x * mask
+            feat_mask = torch.sigmoid(self.feat_mask) if self.use_sigmoid else self.feat_mask
+            x = x * feat_mask
 
-        if self.args.gpu:
-            x = x.cuda()
-            masked_adj = self.masked_adj.cuda()
-        else:
-            x, masked_adj = self.x, self.masked_adj
-        ypred = self.model(x, masked_adj)
+        ypred = self.model(x, self.masked_adj)
         node_pred = ypred[self.graph_idx, node_idx, :]
         return nn.Softmax(dim=0)(node_pred)
 
@@ -384,6 +381,7 @@ class ExplainModule(nn.Module):
         mask_ent_loss = self.coeffs['ent'] * torch.mean(mask_ent_loss)
 
         feat_mask_ent = -feat_mask * torch.log(feat_mask) - (1-feat_mask) * torch.log(1-feat_mask)
+        feat_mask_ent_loss = self.coeffs['feat_ent'] * torch.mean(feat_mask_ent_loss)
 
 
         # laplacian
@@ -413,6 +411,7 @@ class ExplainModule(nn.Module):
             self.writer.add_scalar('optimization/size_loss', size_loss, epoch)
             self.writer.add_scalar('optimization/feat_size_loss', feat_size_loss, epoch)
             self.writer.add_scalar('optimization/mask_ent_loss', mask_ent_loss, epoch)
+            self.writer.add_scalar('optimization/feat_mask_ent_loss', mask_ent_loss, epoch)
             #self.writer.add_scalar('optimization/grad_loss', grad_loss, epoch)
             self.writer.add_scalar('optimization/pred_loss', pred_loss, epoch)
             self.writer.add_scalar('optimization/lap_loss', lap_loss, epoch)
