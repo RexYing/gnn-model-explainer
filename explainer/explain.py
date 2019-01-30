@@ -183,8 +183,8 @@ class Explainer:
         adj0 = torch.FloatTensor(from_adj)
         adj1 = torch.FloatTensor(to_adj)
 
-        _, _, to_feat,_,_   = self.extract_neighborhood(to_idx)
-        _, _, from_feat,_,_ = self.extract_neighborhood(from_idx)
+        new_to_idx, _, to_feat,_,_   = self.extract_neighborhood(to_idx)
+        new_from_idx, _, from_feat,_,_ = self.extract_neighborhood(from_idx)
         #print("FROM", from_feat.shape, from_adj.shape)
         #print("TO", to_feat.shape, to_adj.shape)
         feat0 = torch.FloatTensor(from_feat)
@@ -201,18 +201,18 @@ class Explainer:
           print('iter: ', i, '; loss: ', loss)
           opt.step()
 
-        return P, P @ adj1, P @ feat1
+        return P, P @ adj1, P @ feat1, new_to_idx, new_from_idx
 
     def explain_nodes(self, node_indices, args, graph_idx=0):
         masked_adjs = [self.explain(node_idx, graph_idx=graph_idx) for node_idx in node_indices]
-        P, aligned_adj, aligned_feat = self.align(from_idx=node_indices[0], from_adj=masked_adjs[0], to_idx=node_indices[1], to_adj=masked_adjs[1], args=args)
-        io_utils.log_graph(self.writer, from_adj, 'align/ref')
-        self.log_aligned_nodes(aligned_adj, 1)
+        P, aligned_adj, aligned_feat, new_to_idx, new_from_idx = self.align(from_idx=node_indices[0], from_adj=masked_adjs[0], to_idx=node_indices[1], to_adj=masked_adjs[1], args=args)
+        io_utils.log_graph(self.writer, masked_adjs[0], new_from_idx,  'align/ref')
+        self.log_aligned_nodes(aligned_adj, 1, new_to_idx)
 
         return masked_adjs
 
-    def log_aligned_nodes(self, aligned_adj, idx):
-        io_utils.log_graph(self.writer, aligned_adj.cpu().detach().numpy(), 'align/adj', epoch=idx)
+    def log_aligned_nodes(self, aligned_adj, idx, node_idx):
+        io_utils.log_graph(self.writer, aligned_adj.cpu().detach().numpy(), node_idx, 'align/adj', epoch=idx)
 
     def log_representer(self, rep_val, sim_val, alpha, graph_idx=0):
 

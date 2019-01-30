@@ -2,6 +2,7 @@ import os
 
 import matplotlib.pyplot as plt
 import torch
+import networkx as nx
 import tensorboardX
 
 def gen_prefix(args):
@@ -68,11 +69,11 @@ def log_matrix(writer, mat, name, epoch, fig_size=(8,6), dpi=200):
     fig.canvas.draw()
     writer.add_image(name, tensorboardX.utils.figure_to_image(fig), epoch)
 
-def log_graph(writer, adj, name, epoch=0, fig_size=(4,3), dpi=300):
+def log_graph(writer, adj, node_idx, name, epoch=0, fig_size=(4,3), dpi=300):
     plt.switch_backend('agg')
     fig = plt.figure(figsize=fig_size, dpi=dpi)
     
-    num_nodes = adj.size()[-1]
+    num_nodes = adj.shape[-1]
     G = nx.Graph()
     G.add_nodes_from(range(num_nodes))
     G.node[node_idx]['color'] = 0
@@ -91,6 +92,6 @@ def log_graph(writer, adj, name, epoch=0, fig_size=(4,3), dpi=300):
             alpha=0.7)
     fig.axes[0].xaxis.set_visible(False)
     fig.canvas.draw()
-    self.writer.add_image(name, tensorboardX.utils.figure_to_image(fig), epoch)
+    writer.add_image(name, tensorboardX.utils.figure_to_image(fig), epoch)
 
 
