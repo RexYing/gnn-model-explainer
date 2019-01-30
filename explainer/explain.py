@@ -179,35 +179,41 @@ class Explainer:
     def remove_low_weight_edges(self):
         d
 
-    def align(self, from_idx, from_adj, to_idx, to_adj, args):
-        adj0 = torch.FloatTensor(from_adj)
-        adj1 = torch.FloatTensor(to_adj)
+    def align(self, ref_feat, ref_adj, curr_feat, curr_adj, args):
+        ref_adj = torch.FloatTensor(ref_adj)
+        curr_adj = torch.FloatTensor(curr_adj)
 
-        new_to_idx, _, to_feat,_,_   = self.extract_neighborhood(to_idx)
-        new_from_idx, _, from_feat,_,_ = self.extract_neighborhood(from_idx)
         #print("FROM", from_feat.shape, from_adj.shape)
         #print("TO", to_feat.shape, to_adj.shape)
-        feat0 = torch.FloatTensor(from_feat)
-        feat1 = torch.FloatTensor(to_feat) 
+        ref_feat = torch.FloatTensor(ref_feat)
+        curr_feat = torch.FloatTensor(curr_feat) 
 
-        P = torch.randn(adj0.shape[0], adj1.shape[0], requires_grad=True)
+        P = torch.randn(ref_adj.shape[0], curr_adj.shape[0], requires_grad=True)
         opt = torch.optim.Adam([P], lr=.01, betas=(0.5, 0.999))
         for i in range(args.align_steps):
           opt.zero_grad()
-          feat_loss  = torch.norm(P @ feat1 - feat0)
-          align_loss = torch.norm(P @ adj1 @ torch.transpose(P,0,1) - adj0)
+          feat_loss  = torch.norm(P @ curr_feat - ref_feat)
+          align_loss = torch.norm(P @ curr_adj @ torch.transpose(P,0,1) - ref_adj)
           loss =  feat_loss + align_loss
           loss.backward() # Calculate gradients
           print('iter: ', i, '; loss: ', loss)
           opt.step()
 
-        return P, P @ adj1, P @ feat1, new_to_idx, new_from_idx
+        return P, P @ curr_adj, P @ curr_feat
 
     def explain_nodes(self, node_indices, args, graph_idx=0):
         masked_adjs = [self.explain(node_idx, graph_idx=graph_idx) for node_idx in node_indices]
-        P, aligned_adj, aligned_feat, new_to_idx, new_from_idx = self.align(from_idx=node_indices[0], from_adj=masked_adjs[0], to_idx=node_indices[1], to_adj=masked_adjs[1], args=args)
-        io_utils.log_graph(self.writer, masked_adjs[0], new_from_idx,  'align/ref')
-        self.log_aligned_nodes(aligned_adj, 1, new_to_idx)
+
+        ref_idx = node_indices[0]
+        ref_adj = masked_adjs[0]
+        curr_idx = node_indices[1]
+        curr_adj = masked_adjs[1]
+        new_ref_idx, _, ref_feat,_,_ = self.extract_neighborhood(ref_idx)
+        new_curr_idx, _, curr_feat,_,_   = self.extract_neighborhood(curr_idx)
+        P, aligned_adj, aligned_feat = self.align(ref_feat, ref_adj,
+                curr_feat, curr_adj, args=args)
+        io_utils.log_graph(self.writer, ref_adj, new_ref_idx,  'align/ref')
+        self.log_aligned_nodes(aligned_adj, 1, new_curr_idx)
 
         return masked_adjs
 
