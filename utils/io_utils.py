@@ -1,7 +1,9 @@
 import os
 
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
+import networkx as nx
 import tensorboardX
 
 def gen_prefix(args):
@@ -67,3 +69,38 @@ def log_matrix(writer, mat, name, epoch, fig_size=(8,6), dpi=200):
     plt.tight_layout()
     fig.canvas.draw()
     writer.add_image(name, tensorboardX.utils.figure_to_image(fig), epoch)
+
+def denoise_graph(adj, node_idx, feat=None, threshold=0.1):
+    num_nodes = adj.shape[-1]
+    G = nx.Graph()
+    G.add_nodes_from(range(num_nodes))
+    G.node[node_idx]['color'] = 0
+    if feat is not None:
+        for node in G.nodes():
+            G.node[node]['feat'] = feat[node]
+    weighted_edge_list = [(i, j, adj[i, j]) for i in range(num_nodes) for j in range(num_nodes) if
+            adj[i,j] > threshold]
+    G.add_weighted_edges_from(weighted_edge_list)
+    Gc = max(nx.connected_component_subgraphs(G), key=len) 
+    return Gc
+
+def log_graph(writer, Gc, name, epoch=0, fig_size=(4,3), dpi=300):
+    plt.switch_backend('agg')
+    fig = plt.figure(figsize=fig_size, dpi=dpi)
+   
+    edge_colors = [Gc[i][j]['weight'] for (i,j) in Gc.edges()]
+    node_colors = [Gc.node[i]['color'] if 'color' in Gc.node[i] else 1 for i in Gc.nodes()]
+
+    plt.switch_backend('agg')
+    fig = plt.figure(figsize=fig_size, dpi=dpi)
+    nx.draw(Gc, pos=nx.spring_layout(Gc), with_labels=True, font_size=4,
+            node_color=node_colors, vmin=0, vmax=8, cmap=plt.get_cmap('Set1'),
+            edge_color=edge_colors, edge_cmap=plt.get_cmap('Greys'), edge_vmin=0.0, edge_vmax=1.0,
+            width=0.5, node_size=25,
+            alpha=0.7)
+    #plt.imshow(np.random.rand(5,5), cmap=plt.get_cmap('BuPu'))
+    fig.axes[0].xaxis.set_visible(False)
+    fig.canvas.draw()
+    writer.add_image(name, tensorboardX.utils.figure_to_image(fig), epoch)
+
+
