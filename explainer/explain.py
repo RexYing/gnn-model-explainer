@@ -188,16 +188,20 @@ class Explainer:
         ref_feat = torch.FloatTensor(ref_feat)
         curr_feat = torch.FloatTensor(curr_feat) 
 
-        P = torch.randn(ref_adj.shape[0], curr_adj.shape[0], requires_grad=True)
+        #P = torch.randn(ref_adj.shape[0], curr_adj.shape[0], requires_grad=True)
+        P = nn.Parameter(torch.FloatTensor(ref_adj.shape[0], curr_adj.shape[0]))
+        with torch.no_grad():
+            nn.init.constant_(P, 1.0/ref_adj.shape[0])
         opt = torch.optim.Adam([P], lr=.01, betas=(0.5, 0.999))
         for i in range(args.align_steps):
-          opt.zero_grad()
-          feat_loss  = torch.norm(P @ curr_feat - ref_feat)
-          align_loss = torch.norm(P @ curr_adj @ torch.transpose(P,0,1) - ref_adj)
-          loss =  feat_loss + align_loss
-          loss.backward() # Calculate gradients
-          print('iter: ', i, '; loss: ', loss)
-          opt.step()
+            opt.zero_grad()
+            feat_loss  = torch.norm(P @ curr_feat - ref_feat)
+            align_loss = torch.norm(P @ curr_adj @ torch.transpose(P,0,1) - ref_adj)
+            loss =  feat_loss + align_loss
+            loss.backward() # Calculate gradients
+            self.writer.add_scalar('optimization/align_loss', loss, i)
+            print('iter: ', i, '; loss: ', loss)
+            opt.step()
 
         return P, P @ curr_adj, P @ curr_feat
 
@@ -212,13 +216,12 @@ class Explainer:
         new_curr_idx, _, curr_feat,_,_   = self.extract_neighborhood(curr_idx)
         P, aligned_adj, aligned_feat = self.align(ref_feat, ref_adj,
                 curr_feat, curr_adj, args=args)
-        io_utils.log_graph(self.writer, ref_adj, new_ref_idx,  'align/ref')
-        self.log_aligned_nodes(aligned_adj, 1, new_curr_idx)
+        io_utils.log_graph(self.writer, ref_adj, new_ref_idx, 'align/ref')
+        io_utils.log_graph(self.writer, curr_adj, new_curr_idx, 'align/before')
+        io_utils.log_graph(self.writer, aligned_adj.cpu().detach().numpy(), new_curr_idx,
+                'align/from', epoch=1)
 
         return masked_adjs
-
-    def log_aligned_nodes(self, aligned_adj, idx, node_idx):
-        io_utils.log_graph(self.writer, aligned_adj.cpu().detach().numpy(), node_idx, 'align/adj', epoch=idx)
 
     def log_representer(self, rep_val, sim_val, alpha, graph_idx=0):
 
@@ -262,25 +265,25 @@ class Explainer:
         self.writer.add_image('local/representer_neigh', tensorboardX.utils.figure_to_image(fig), 0)
 
 
-        fig = plt.figure(figsize=(4,3), dpi=400)
-        dat = [[i, rep_val[i], sim_val[i], alpha[i]] for i in range(len(rep_val))]
-        dat = pd.DataFrame(dat, columns=['idx', 'rep val', 'sim_val', 'alpha'])
-        sns.barplot(x='idx', y='rep val', data=dat)
-        fig.axes[0].xaxis.set_visible(False)
-        fig.canvas.draw()
-        self.writer.add_image('local/representer_bar', tensorboardX.utils.figure_to_image(fig), 0)
+        #fig = plt.figure(figsize=(4,3), dpi=400)
+        #dat = [[i, rep_val[i], sim_val[i], alpha[i]] for i in range(len(rep_val))]
+        #dat = pd.DataFrame(dat, columns=['idx', 'rep val', 'sim_val', 'alpha'])
+        #sns.barplot(x='idx', y='rep val', data=dat)
+        #fig.axes[0].xaxis.set_visible(False)
+        #fig.canvas.draw()
+        #self.writer.add_image('local/representer_bar', tensorboardX.utils.figure_to_image(fig), 0)
 
-        fig = plt.figure(figsize=(4,3), dpi=400)
-        sns.barplot(x='idx', y='alpha', data=dat)
-        fig.axes[0].xaxis.set_visible(False)
-        fig.canvas.draw()
-        self.writer.add_image('local/alpha_bar', tensorboardX.utils.figure_to_image(fig), 0)
+        #fig = plt.figure(figsize=(4,3), dpi=400)
+        #sns.barplot(x='idx', y='alpha', data=dat)
+        #fig.axes[0].xaxis.set_visible(False)
+        #fig.canvas.draw()
+        #self.writer.add_image('local/alpha_bar', tensorboardX.utils.figure_to_image(fig), 0)
 
-        fig = plt.figure(figsize=(4,3), dpi=400)
-        sns.barplot(x='idx', y='sim_val', data=dat)
-        fig.axes[0].xaxis.set_visible(False)
-        fig.canvas.draw()
-        self.writer.add_image('local/sim_bar', tensorboardX.utils.figure_to_image(fig), 0)
+        #fig = plt.figure(figsize=(4,3), dpi=400)
+        #sns.barplot(x='idx', y='sim_val', data=dat)
+        #fig.axes[0].xaxis.set_visible(False)
+        #fig.canvas.draw()
+        #self.writer.add_image('local/sim_bar', tensorboardX.utils.figure_to_image(fig), 0)
 
 
 class ExplainModule(nn.Module):
@@ -500,24 +503,25 @@ class ExplainModule(nn.Module):
     def log_masked_adj(self, node_idx, epoch):
         # use [0] to remove the batch dim
         masked_adj = self.masked_adj[0].cpu().detach().numpy()
-        num_nodes = self.adj.size()[-1]
-        G = nx.Graph()
-        G.add_nodes_from(range(num_nodes))
-        G.node[node_idx]['color'] = 0
-        weighted_edge_list = [(i, j, masked_adj[i, j]) for i in range(num_nodes) for j in range(num_nodes) if masked_adj[i,j] > 0.1]
-        G.add_weighted_edges_from(weighted_edge_list)
-        Gc = max(nx.connected_component_subgraphs(G), key=len)
-        edge_colors = [Gc[i][j]['weight'] for (i,j) in Gc.edges()]
-        node_colors = [Gc.node[i]['color'] if 'color' in Gc.node[i] else 1 for i in Gc.nodes()]
+        io_utils.log_graph(self.writer, masked_adj, node_idx, name='mask/graph', epoch=epoch)
+        #num_nodes = self.adj.size()[-1]
+        #G = nx.Graph()
+        #G.add_nodes_from(range(num_nodes))
+        #G.node[node_idx]['color'] = 0
+        #weighted_edge_list = [(i, j, masked_adj[i, j]) for i in range(num_nodes) for j in range(num_nodes) if masked_adj[i,j] > 0.1]
+        #G.add_weighted_edges_from(weighted_edge_list)
+        #Gc = max(nx.connected_component_subgraphs(G), key=len)
+        #edge_colors = [Gc[i][j]['weight'] for (i,j) in Gc.edges()]
+        #node_colors = [Gc.node[i]['color'] if 'color' in Gc.node[i] else 1 for i in Gc.nodes()]
 
-        plt.switch_backend('agg')
-        fig = plt.figure(figsize=(4,3), dpi=600)
-        nx.draw(Gc, pos=nx.spring_layout(G), with_labels=True, font_size=4,
-                node_color=node_colors, vmin=0, vmax=8, cmap=plt.get_cmap('Set1'),
-                edge_color=edge_colors, edge_cmap=plt.get_cmap('Greys'), edge_vmin=0.0, edge_vmax=1.0,
-                width=0.5, node_size=25,
-                alpha=0.7)
-        fig.axes[0].xaxis.set_visible(False)
-        fig.canvas.draw()
-        self.writer.add_image('mask/graph', tensorboardX.utils.figure_to_image(fig), epoch)
+        #plt.switch_backend('agg')
+        #fig = plt.figure(figsize=(4,3), dpi=600)
+        #nx.draw(Gc, pos=nx.spring_layout(G), with_labels=True, font_size=4,
+        #        node_color=node_colors, vmin=0, vmax=8, cmap=plt.get_cmap('Set1'),
+        #        edge_color=edge_colors, edge_cmap=plt.get_cmap('Greys'), edge_vmin=0.0, edge_vmax=1.0,
+        #        width=0.5, node_size=25,
+        #        alpha=0.7)
+        #fig.axes[0].xaxis.set_visible(False)
+        #fig.canvas.draw()
+        #self.writer.add_image('mask/graph', tensorboardX.utils.figure_to_image(fig), epoch)
 
