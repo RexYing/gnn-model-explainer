@@ -126,10 +126,10 @@ def main():
                                       cg_dict['label'], cg_dict['pred'], cg_dict['train_idx'],
                                       prog_args, writer=writer, print_training=True)
         train_idx = cg_dict['train_idx']
-        explainer.explain(prog_args.explain_node, unconstrained=False)
+#        explainer.explain(prog_args.explain_node, unconstrained=False)
 
         # explain a set of nodes
-        #masked_adj = explainer.explain_nodes([i for i in range(300, 700, 5)])
+        masked_adj = explainer.explain_nodes([420,430])
         #pickle.dump(masked_adj, open('out/masked_adjs.pkl', 'wb'))
 
         #print(masked_adj[3])
