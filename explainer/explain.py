@@ -176,23 +176,23 @@ class Explainer:
         masked_adj = explainer.masked_adj[0].cpu().detach().numpy()
         return masked_adj
 
-    def align(self, explained_idx, from_adj, to_adj):
-        adj0 = torch.autograd.Variable(from_adj, requires_grad=False)
-        adj1 = torch.autograd.Variable(to_adj,   requires_grad=False)
+    def align(self, from_idx, from_adj, to_idx, to_adj):
+        adj0 = torch.FloatTensor(from_adj)
+        adj1 = torch.FloatTensor(to_adj)
 
-        N_feat = 12
-        feat0 = torch.torch.randn(adj0.shape[0], N_feat, requires_grad=False)
-        feat1 = torch.torch.randn(adj1.shape[0], N_feat, requires_grad=False)
+        _, _, to_feat,_,_   = self.extract_neighborhood(to_idx)
+        _, _, from_feat,_,_ = self.extract_neighborhood(from_idx)
+        #print("FROM", from_feat.shape, from_adj.shape)
+        #print("TO", to_feat.shape, to_adj.shape)
+        feat0 = torch.FloatTensor(from_feat)
+        feat1 = torch.FloatTensor(to_feat) 
 
         P = torch.randn(adj0.shape[0], adj1.shape[0], requires_grad=True)
-
         opt = torch.optim.Adam([P], lr=.01, betas=(0.5, 0.999))
         for i in range(1000):
           opt.zero_grad()
-          feat = torch.transpose(P, 0, 1) @ feat0 - feat1
-          feat_loss = torch.norm(feat)
-          align = torch.transpose(P,0,1) @ adj0 @ P - adj1
-          align_loss = torch.norm(align)
+          feat_loss  = torch.norm(P @ feat1 - feat0)
+          align_loss = torch.norm(P @ adj1 @ torch.transpose(P,0,1) - adj0)
           loss =  feat_loss + align_loss
           loss.backward() # Calculate gradients
           opt.step()
@@ -202,7 +202,7 @@ class Explainer:
 
     def explain_nodes(self, node_indices, graph_idx=0):
         masked_adjs = [self.explain(node_idx, graph_idx=graph_idx) for node_idx in node_indices]
-        self.align(node_indices[0], masked_adjs[1], masked_adjs[0])
+        self.align(from_idx=node_indices[0], from_adj=masked_adjs[0], to_idx=node_indices[1], to_adj=masked_adjs[1])
         return masked_adjs
 
     def log_representer(self, rep_val, sim_val, alpha, graph_idx=0):
@@ -403,10 +403,10 @@ class ExplainModule(nn.Module):
 
         # entropy
         mask_ent = -mask * torch.log(mask) - (1-mask) * torch.log(1-mask)
-        mask_ent_loss = self.coeffs['ent'] * torch.mean(mask_ent_loss)
+        mask_ent_loss = self.coeffs['ent'] * torch.mean(mask_ent)
 
         feat_mask_ent = -feat_mask * torch.log(feat_mask) - (1-feat_mask) * torch.log(1-feat_mask)
-        feat_mask_ent_loss = self.coeffs['feat_ent'] * torch.mean(feat_mask_ent_loss)
+        feat_mask_ent_loss = self.coeffs['feat_ent'] * torch.mean(feat_mask_ent)
 
 
         # laplacian
