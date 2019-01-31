@@ -88,7 +88,7 @@ def arg_parse():
                         method='base',
                         name_suffix='',
                         align_steps=1000,
-                        explain_node=420,
+                        explain_node=None,
                         mask_act='sigmoid'
                        )
     return parser.parse_args()
@@ -132,13 +132,13 @@ def main():
                                       cg_dict['label'], cg_dict['pred'], cg_dict['train_idx'],
                                       prog_args, writer=writer, print_training=True)
         train_idx = cg_dict['train_idx']
-#        explainer.explain(prog_args.explain_node, unconstrained=False)
+        if prog_args.explain_node is not None:
+            explainer.explain(prog_args.explain_node, unconstrained=False)
+        else:
+            # explain a set of nodes
+            masked_adj = explainer.explain_nodes([370,390], prog_args)
+            #pickle.dump(masked_adj, open('out/masked_adjs.pkl', 'wb'))
 
-        # explain a set of nodes
-        masked_adj = explainer.explain_nodes([420,440], prog_args)
-        #pickle.dump(masked_adj, open('out/masked_adjs.pkl', 'wb'))
-
-        #print(masked_adj[3])
 
         
 if __name__ == "__main__":
