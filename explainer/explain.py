@@ -165,13 +165,15 @@ class Explainer:
                       '; mask density: ', mask_density.item(),
                       '; pred: ', ypred)
 
+            single_subgraph_label = sub_label.squeeze()
             if self.writer is not None:
                 self.writer.add_scalar('mask/density', mask_density, epoch)
                 self.writer.add_scalar('optimization/lr', explainer.optimizer.param_groups[0]['lr'], epoch)
                 if epoch % 100 == 0:
                     explainer.log_mask(epoch)
-                    explainer.log_masked_adj(node_idx_new, epoch, label=sub_label.squeeze())
-                    explainer.log_adj_grad(node_idx_new, pred_label, epoch)
+                    explainer.log_masked_adj(node_idx_new, epoch, label=single_subgraph_label)
+                    explainer.log_adj_grad(node_idx_new, pred_label, epoch,
+                            label=single_subgraph_label)
 
         print('finished training in ', time.time() - begin_time)
         masked_adj = explainer.masked_adj[0].cpu().detach().numpy()
@@ -553,13 +555,16 @@ class ExplainModule(nn.Module):
             self.writer.add_image('mask/bias', tensorboardX.utils.figure_to_image(fig), epoch)
 
 
-    def log_adj_grad(self, node_idx, pred_label, epoch):
+    def log_adj_grad(self, node_idx, pred_label, epoch, label=None):
         if self.adj.grad is not None:
             io_utils.log_matrix(self.writer, self.adj.grad.squeeze(), 'grad/adj1', epoch)
         adj_grad = torch.abs(self.adj_feat_grad(node_idx, pred_label[node_idx])[0])[self.graph_idx]
         adj_grad = adj_grad + adj_grad.t()
         io_utils.log_matrix(self.writer, adj_grad, 'grad/adj', epoch)
         #self.adj.requires_grad = False
+
+        G = io_utils.denoise_graph(adj_grad, node_idx, label=label)
+        io_utils.log_graph(self.writer, G, name='grad/graph', epoch=epoch)
 
     def log_masked_adj(self, node_idx, epoch, label=None):
         # use [0] to remove the batch dim
