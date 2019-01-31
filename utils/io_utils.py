@@ -93,7 +93,7 @@ def log_graph(writer, Gc, name, epoch=0, fig_size=(4,3), dpi=300):
     fig = plt.figure(figsize=fig_size, dpi=dpi)
    
     node_colors = []
-    edge_colors = [min(max(Gc[i][j]['weight'],0.0),1.0) for (i,j) in Gc.edges()]
+    edge_colors = [min(max(w, 0.0), 1.0) for (u,v,w) in Gc.edges.data('weight', default=1)]
     for i in Gc.nodes():
         if 'self' in Gc.node[i]:
             node_colors.append(0)
