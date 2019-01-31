@@ -19,6 +19,8 @@ import torch.nn as nn
 import utils.io_utils as io_utils
 import utils.train_utils as train_utils
 
+import models_gcn.GCN as GCN
+
 use_cuda = torch.cuda.is_available()
 FloatTensor = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
 LongTensor = torch.cuda.LongTensor if use_cuda else torch.LongTensor
@@ -227,6 +229,47 @@ class Explainer:
 
         io_utils.log_graph(self.writer, G_ref, 'align/ref')
         io_utils.log_graph(self.writer, G_curr, 'align/before')
+        #io_utils.log_graph(self.writer, aligned_adj.cpu().detach().numpy(), new_curr_idx,
+        #        'align/aligned', epoch=1)
+
+        return masked_adjs
+
+    def explain_nodes_gnn_cluster(self, node_indices, args, graph_idx=0):
+        masked_adjs = [self.explain(node_idx, graph_idx=graph_idx) for node_idx in node_indices]
+
+        # ref_idx = node_indices[0]
+        # ref_adj = masked_adjs[0]
+
+        graphs = []
+        feats = []
+        adjs = []
+        for i,idx in enumerate(node_indices):
+            new_idx, _, feat, _, _ = self.extract_neighborhood(idx)
+            G = io_utils.denoise_graph(masked_adjs[i], new_idx, feat, threshold=0.5)
+            denoised_feat = np.array([G.node[node]['feat'] for node in G.nodes()])
+            denoised_adj = nx.to_numpy_matrix(G)
+            graphs.append(G)
+            feats.append(denoised_feat)
+            adjs.append(denoised_adj)
+
+        model = GCN(input_dim=feats[0].shape[1],
+                    hidden_dim=16, output_dim=16, num_layers=2,
+                    normalize_embedding_l2=True)
+
+        pred_all = []
+
+        for i in range(len(graphs)):
+            adj = Variable(torch.from_numpy(feats[i]).float(), requires_grad=False)
+            feature = Variable(torch.from_numpy(batch[1]).float(), requires_grad=False)
+
+            pred = model(feature, adj)
+            pred_all.append(pred.data.numpy())
+
+            if dataset_sampler.done_train:
+                break
+
+        io_utils.log_graph(self.writer, graphs[0], 'align/ref')
+        io_utils.log_graph(self.writer, graphs[1], 'align/before')
         #io_utils.log_graph(self.writer, aligned_adj.cpu().detach().numpy(), new_curr_idx,
         #        'align/aligned', epoch=1)
 
@@ -482,7 +525,7 @@ class ExplainModule(nn.Module):
         self.writer.add_image('mask/mask', tensorboardX.utils.figure_to_image(fig), epoch)
 
         fig = plt.figure(figsize=(4,3), dpi=400)
-        plt.imshow(self.feat_mask.cpu().detach().numpy(), cmap=plt.get_cmap('BuPu'))
+        plt.imshow(self.feat_mask.cpu().detach().numpy()[:,np.newaxis], cmap=plt.get_cmap('BuPu'))
         cbar = plt.colorbar()
         cbar.solids.set_edgecolor("face")
 
