@@ -169,7 +169,7 @@ class Explainer:
                 self.writer.add_scalar('optimization/lr', explainer.optimizer.param_groups[0]['lr'], epoch)
                 if epoch % 100 == 0:
                     explainer.log_mask(epoch)
-                    explainer.log_masked_adj(node_idx_new, epoch)
+                    explainer.log_masked_adj(node_idx_new, epoch, label=sub_label.squeeze())
                     explainer.log_adj_grad(node_idx_new, pred_label, epoch)
 
         print('finished training in ', time.time() - begin_time)
@@ -335,7 +335,7 @@ class ExplainModule(nn.Module):
         init_strategy='normal'
         num_nodes = adj.size()[1]
         self.mask, self.mask_bias = self.construct_edge_mask(num_nodes, init_strategy=init_strategy)
-        self.feat_mask = self.construct_feat_mask(x.size(-1))
+        self.feat_mask = self.construct_feat_mask(x.size(-1), init_strategy='constant')
         params = [self.mask, self.feat_mask]
         if self.mask_bias is not None:
             params.append(self.mask_bias)
@@ -346,7 +346,7 @@ class ExplainModule(nn.Module):
 
         self.scheduler, self.optimizer = train_utils.build_optimizer(args, params)
 
-        self.coeffs = {'size': 4.0, 'feat_size': 0.1, 'ent': 0.1,
+        self.coeffs = {'size': 0.005, 'feat_size': 0.1, 'ent': 0.1,
                 'feat_ent':0.1, 'grad': 0, 'lap': 1.0}
 
         # ypred = self.model(x, adj)[graph_idx][node_idx]
@@ -361,6 +361,9 @@ class ExplainModule(nn.Module):
             std = 0.1
             with torch.no_grad():
                 mask.normal_(1.0, std)
+        elif init_strategy == 'constant':
+            with torch.no_grad():
+                nn.init.constant_(mask, 1.0)
         return mask
 
     def construct_edge_mask(self, num_nodes, init_strategy='normal', const_val=1.0):
@@ -454,7 +457,7 @@ class ExplainModule(nn.Module):
             mask = torch.sigmoid(self.mask)
         elif self.mask_act == 'ReLU':
             mask = nn.ReLU()(self.mask)
-        size_loss = self.coeffs['size'] * torch.mean(mask)
+        size_loss = self.coeffs['size'] * torch.sum(mask)
 
         feat_mask = torch.sigmoid(self.feat_mask) if self.use_sigmoid else self.feat_mask
         feat_size_loss = self.coeffs['feat_size'] * torch.mean(feat_mask)
@@ -549,10 +552,10 @@ class ExplainModule(nn.Module):
         io_utils.log_matrix(self.writer, adj_grad, 'grad/adj', epoch)
         #self.adj.requires_grad = False
 
-    def log_masked_adj(self, node_idx, epoch):
+    def log_masked_adj(self, node_idx, epoch, label=None):
         # use [0] to remove the batch dim
         masked_adj = self.masked_adj[0].cpu().detach().numpy()
-        G = io_utils.denoise_graph(masked_adj, node_idx)
+        G = io_utils.denoise_graph(masked_adj, node_idx, label=label)
         io_utils.log_graph(self.writer, G, name='mask/graph', epoch=epoch)
         #num_nodes = self.adj.size()[-1]
         #G = nx.Graph()
