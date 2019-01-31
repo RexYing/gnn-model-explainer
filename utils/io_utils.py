@@ -75,6 +75,7 @@ def denoise_graph(adj, node_idx, feat=None, threshold=0.1):
     G = nx.Graph()
     G.add_nodes_from(range(num_nodes))
     G.node[node_idx]['color'] = 0
+    #print('num nodes : ', G.number_of_nodes())
     if feat is not None:
         for node in G.nodes():
             G.node[node]['feat'] = feat[node]

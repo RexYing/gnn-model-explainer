@@ -133,13 +133,13 @@ class Explainer:
         pred_label = np.argmax(self.pred[graph_idx][neighbors], axis=1)
         print('pred label: ', pred_label[node_idx_new])
 
-        f_test = self.embedding[graph_idx, node_idx, :]
-        f_idx = self.embedding[graph_idx, self.train_idx, :]
-        alpha = self.alpha[graph_idx, self.train_idx, pred_label[node_idx_new]]
-        sim_val = f_idx @ f_test
-        rep_val = sim_val * alpha
-        if self.writer is not None:
-            self.log_representer(rep_val, sim_val, alpha)
+        #f_test = self.embedding[graph_idx, node_idx, :]
+        #f_idx = self.embedding[graph_idx, self.train_idx, :]
+        #alpha = self.alpha[graph_idx, self.train_idx, pred_label[node_idx_new]]
+        #sim_val = f_idx @ f_test
+        #rep_val = sim_val * alpha
+        #if self.writer is not None:
+        #    self.log_representer(rep_val, sim_val, alpha)
 
         explainer = ExplainModule(adj, x, self.model, label, self.args, writer=self.writer)
         if self.args.gpu:
@@ -197,14 +197,16 @@ class Explainer:
         for i in range(args.align_steps):
             opt.zero_grad()
             feat_loss  = torch.norm(P @ curr_feat - ref_feat)
-            align_loss = torch.norm(P @ curr_adj @ torch.transpose(P,0,1) - ref_adj)
+
+            aligned_adj = P @ curr_adj @ torch.transpose(P, 0, 1)
+            align_loss = torch.norm(aligned_adj - ref_adj)
             loss =  feat_loss + align_loss
             loss.backward() # Calculate gradients
             self.writer.add_scalar('optimization/align_loss', loss, i)
             print('iter: ', i, '; loss: ', loss)
             opt.step()
 
-        return P, P @ curr_adj, P @ curr_feat
+        return P, aligned_adj, P @ curr_feat
 
     def explain_nodes(self, node_indices, args, graph_idx=0):
         masked_adjs = [self.explain(node_idx, graph_idx=graph_idx) for node_idx in node_indices]
@@ -244,6 +246,8 @@ class Explainer:
         aligned_idx = np.argmax(P[:, curr_node_idx])
         #print(list(G_curr.nodes()))
         print('aligned self: ', aligned_idx)
+        #print('feat: ', aligned_feat.shape)
+        #print('aligned adj: ', aligned_adj.shape)
         G_aligned = io_utils.denoise_graph(aligned_adj, aligned_idx, aligned_feat, threshold=0.5)
         io_utils.log_graph(self.writer, G_aligned, 'mask/aligned')
         
@@ -325,6 +329,7 @@ class ExplainModule(nn.Module):
         self.graph_idx = graph_idx
         self.args = args
         self.writer = writer
+        self.mask_act = args.mask_act
         self.use_sigmoid = use_sigmoid
 
         init_strategy='normal'
@@ -377,8 +382,11 @@ class ExplainModule(nn.Module):
         return mask, mask_bias
 
     def _masked_adj(self):
-        sym_mask = torch.sigmoid(self.mask) if self.use_sigmoid else self.mask
-        #sym_mask = nn.ReLU()(self.mask) if self.use_sigmoid else self.mask
+        sym_mask = self.mask
+        if self.mask_act == 'sigmoid':
+            sym_mask = torch.sigmoid(self.mask)
+        elif self.mask_act == 'ReLU':
+            sym_mask = nn.ReLU()(self.mask)
         sym_mask = (sym_mask + sym_mask.t()) / 2
         adj = self.adj.cuda() if self.args.gpu else self.adj
         masked_adj = adj * sym_mask
@@ -441,8 +449,11 @@ class ExplainModule(nn.Module):
         pred_loss = -torch.log(logit)
 
         # size
-        mask = torch.sigmoid(self.mask) if self.use_sigmoid else self.mask
-        #mask = nn.ReLU()(self.mask) if self.use_sigmoid else self.mask
+        mask = self.mask
+        if self.mask_act == 'sigmoid':
+            mask = torch.sigmoid(self.mask)
+        elif self.mask_act == 'ReLU':
+            mask = nn.ReLU()(self.mask)
         size_loss = self.coeffs['size'] * torch.mean(mask)
 
         feat_mask = torch.sigmoid(self.feat_mask) if self.use_sigmoid else self.feat_mask

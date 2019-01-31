@@ -76,8 +76,8 @@ def gen_syn2(nb_shapes = 100, width_basis = 350):
     basis_type = 'ba'
 
     # Create two grids
-    mu_1, sigma_1 = np.array([0, 0]), np.array([0.5, 1])
-    mu_2, sigma_2 = np.array([1, 0]), np.array([0.5, 1])
+    mu_1, sigma_1 = np.array([0.05 * i for i in range(10)]), np.array([0.5] * 10)
+    mu_2, sigma_2 = np.array([1 - 0.05 * i for i in range(10)]), np.array([0.5] * 10)
     feat_gen_G1 = featgen.GaussianFeatureGen(mu=mu_1, sigma=sigma_1)
     feat_gen_G2 = featgen.GaussianFeatureGen(mu=mu_2, sigma=sigma_2)
     G1, role_id1, name = gen_syn1(feature_generator=feat_gen_G1, m=4)

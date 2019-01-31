@@ -56,6 +56,8 @@ def arg_parse():
             const=False, default=True,
             help='Whether to add bias. Default to True.')
     # Explainer
+    parser.add_argument('--mask-act', dest='mask_act', type=str,
+            help='sigmoid, ReLU.')
     parser.add_argument('--mask-bias', dest='mask_bias', action='store_const',
             const=True, default=False,
             help='Whether to add bias. Default to True.')
@@ -86,7 +88,8 @@ def arg_parse():
                         method='base',
                         name_suffix='',
                         align_steps=1000,
-                        explain_node=420
+                        explain_node=420,
+                        mask_act='sigmoid'
                        )
     return parser.parse_args()
 
