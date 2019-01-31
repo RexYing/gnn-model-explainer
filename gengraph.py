@@ -72,6 +72,23 @@ def gen_syn1(nb_shapes = 80, width_basis = 300, feature_generator=None, m=5):
     name = basis_type + '_' + str(width_basis) + '_' + str(nb_shapes)
     return G, role_id, name
 
+def gen_syn3(nb_shapes = 80, width_basis = 300, feature_generator=None, m=5):
+    basis_type = 'ba'
+    list_shapes = [['cycle', 5]] * nb_shapes
+
+    fig = plt.figure(figsize=(8,6), dpi=300)
+
+    G, role_id, plugins = synthetic_structsim.build_graph(width_basis, basis_type, list_shapes,
+            start=0, m=5)
+    G = perturb_new([G], 0.01)[0]
+
+    if feature_generator is None:
+        feature_generator = featgen.ConstFeatureGen(1)
+    feature_generator.gen_node_features(G)
+
+    name = basis_type + '_' + str(width_basis) + '_' + str(nb_shapes)
+    return G, role_id, name
+
 def gen_syn2(nb_shapes = 100, width_basis = 350):
     basis_type = 'ba'
 

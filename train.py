@@ -386,7 +386,6 @@ def prepare_data(graphs, args, test_graphs=None, max_nodes=0):
             dataset_sampler.max_num_nodes, dataset_sampler.feat_dim, dataset_sampler.assign_feat_dim
 
 def syn_task1(args, writer=None):
-
     # data
     G, labels, name = gengraph.gen_syn1(
             feature_generator=featgen.ConstFeatureGen(np.ones(args.input_dim, dtype=float)))
@@ -420,6 +419,23 @@ def syn_task2(args, writer=None):
 
     train_node_classifier(G, labels, model, args, writer=writer)
 
+def syn_task3(args, writer=None):
+    # data
+    G, labels, name = gengraph.gen_syn3(
+            feature_generator=featgen.ConstFeatureGen(np.ones(args.input_dim, dtype=float)))
+    print(labels)
+    num_classes = max(labels)+1
+
+    if args.method == 'attn':
+        print('Method: attn')
+    else:
+        print('Method: base')
+        model = models.GcnEncoderNode(args.input_dim, args.hidden_dim, args.output_dim, num_classes,
+                                       args.num_gc_layers, bn=args.bn, args=args)
+        if args.gpu:
+            model = model.cuda()
+
+    train_node_classifier(G, labels, model, args, writer=writer)
 
 def pkl_task(args, feat=None):
     with open(os.path.join(args.datadir, args.pkl_fname), 'rb') as pkl_file:
@@ -657,6 +673,8 @@ def main():
             syn_task1(prog_args, writer=writer)
         elif prog_args.dataset == 'syn2':
             syn_task2(prog_args, writer=writer)
+        elif prog_args.dataset == 'syn3':
+            syn_task3(prog_args, writer=writer)
 
 
     writer.close()
