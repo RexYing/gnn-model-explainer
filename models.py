@@ -37,6 +37,7 @@ class GraphConv(nn.Module):
     def forward(self, x, adj):
         if self.dropout > 0.001:
             x = self.dropout_layer(x)
+        #deg = torch.sum(adj, -1, keepdim=True)
         y = torch.matmul(adj, x)
         y = torch.matmul(y, self.weight)
         if self.add_self:

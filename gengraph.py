@@ -23,11 +23,12 @@ def perturb_new(graph_list, p):
     perturbed_graph_list = []
     for G_original in graph_list:
         G = G_original.copy()
-        edge_remove_count = 0
-        for (u, v) in list(G.edges()):
-            if np.random.rand()<p:
-                G.remove_edge(u, v)
-                edge_remove_count += 1
+        #edge_remove_count = 0
+        #for (u, v) in list(G.edges()):
+        #    if np.random.rand()<p:
+        #        G.remove_edge(u, v)
+        #        edge_remove_count += 1
+        edge_remove_count = int(G.number_of_edges() * p)
         # randomly add the edges back
         for i in range(edge_remove_count):
             while True:
@@ -93,12 +94,12 @@ def gen_syn2(nb_shapes = 100, width_basis = 350):
     basis_type = 'ba'
 
     random_mu = [0.0] * 8
-    random_sigma = [0.5] * 8
+    random_sigma = [1.0] * 8
     # Create two grids
     #mu_1, sigma_1 = np.array([0.05 * i for i in range(10)]), np.array([0.5] * 10)
     #mu_2, sigma_2 = np.array([1 - 0.05 * i for i in range(10)]), np.array([0.5] * 10)
-    mu_1, sigma_1 = np.array([0.05 * i for i in range(2)] + random_mu), np.array([0.5] * 2 + random_sigma)
-    mu_2, sigma_2 = np.array([1 - 0.05 * i for i in range(2)] + random_mu), np.array([0.5] * 2 + random_sigma)
+    mu_1, sigma_1 = np.array([-1.0]*2 + random_mu), np.array([0.5]*2 + random_sigma)
+    mu_2, sigma_2 = np.array([1.0]*2 + random_mu), np.array([0.5]*2 + random_sigma)
     feat_gen_G1 = featgen.GaussianFeatureGen(mu=mu_1, sigma=sigma_1)
     feat_gen_G2 = featgen.GaussianFeatureGen(mu=mu_2, sigma=sigma_2)
     G1, role_id1, name = gen_syn1(feature_generator=feat_gen_G1, m=4)
