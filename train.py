@@ -21,6 +21,7 @@ import time
 import gengraph
 from graph_sampler import GraphSampler
 import load_data
+import utils
 import utils.io_utils as io_utils
 import utils.parser_utils as parser_utils
 import utils.train_utils as train_utils
@@ -251,10 +252,12 @@ def train(dataset, model, args, same_feat=True, val_dataset=None, test_dataset=N
             test_epochs.append(test_result['epoch'])
             test_accs.append(test_result['acc'])
 
+    print(ypred.cpu().detach().numpy())
+
     matplotlib.style.use('seaborn')
     plt.switch_backend('agg')
     plt.figure()
-    plt.plot(train_epochs, util.exp_moving_avg(train_accs, 0.85), '-', lw=1)
+#    plt.plot(train_epochs, utils.exp_moving_avg(train_accs, 0.85), '-', lw=1)
     if test_dataset is not None:
         plt.plot(best_val_epochs, best_val_accs, 'bo', test_epochs, test_accs, 'go')
         plt.legend(['train', 'val', 'test'])
@@ -265,6 +268,14 @@ def train(dataset, model, args, same_feat=True, val_dataset=None, test_dataset=N
     plt.close()
     matplotlib.style.use('default')
 
+    predictions = ypred.cpu().detach().numpy()
+
+    cg_data = {'adj': data['adj'],
+                'feat': data['feats'],
+                'label': data['label'],
+                'pred': np.expand_dims(predictions, axis=0), 
+                'train_idx': list(range(len(dataset)))}
+    io_utils.save_checkpoint(model, optimizer, args, num_epochs=-1, cg_dict=cg_data)
     return model, val_accs
 
 def train_node_classifier(G, labels, model, args, writer=None):
