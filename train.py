@@ -21,7 +21,8 @@ import time
 import gengraph
 from graph_sampler import GraphSampler
 import load_data
-import utils
+
+import utils.math_utils as math_utils
 import utils.io_utils as io_utils
 import utils.parser_utils as parser_utils
 import utils.train_utils as train_utils
@@ -252,12 +253,10 @@ def train(dataset, model, args, same_feat=True, val_dataset=None, test_dataset=N
             test_epochs.append(test_result['epoch'])
             test_accs.append(test_result['acc'])
 
-    print(ypred.cpu().detach().numpy())
-
     matplotlib.style.use('seaborn')
     plt.switch_backend('agg')
     plt.figure()
-#    plt.plot(train_epochs, utils.exp_moving_avg(train_accs, 0.85), '-', lw=1)
+    plt.plot(train_epochs, math_utils.exp_moving_avg(train_accs, 0.85), '-', lw=1)
     if test_dataset is not None:
         plt.plot(best_val_epochs, best_val_accs, 'bo', test_epochs, test_accs, 'go')
         plt.legend(['train', 'val', 'test'])
