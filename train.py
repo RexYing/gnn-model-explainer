@@ -188,13 +188,25 @@ def train(dataset, model, args, same_feat=True, val_dataset=None, test_dataset=N
     test_accs = []
     test_epochs = []
     val_accs = []
+    
     for epoch in range(args.num_epochs):
         begin_time = time.time()
         avg_loss = 0.0
         model.train()
+        predictions = []
         print('Epoch: ', epoch)
         for batch_idx, data in enumerate(dataset):
             model.zero_grad()
+            if batch_idx==0:
+              prev_adjs = data['adj']; prev_feats = data['feats']; prev_labels = data['label']
+              all_adjs = prev_adjs   ; all_feats = prev_feats    ; all_labels = prev_labels
+            elif batch_idx < 5:
+              prev_adjs   = data['adj']
+              prev_feats  = data['feats']
+              prev_labels = data['label']
+              all_adjs    = torch.cat((all_adjs,   prev_adjs),   dim=0)
+              all_feats   = torch.cat((all_feats,  prev_feats),  dim=0)
+              all_labels  = torch.cat((all_labels, prev_labels), dim=0)
             adj = Variable(data['adj'].float(), requires_grad=False).cuda()
             h0 = Variable(data['feats'].float(), requires_grad=False).cuda()
             label = Variable(data['label'].long()).cuda()
@@ -202,6 +214,9 @@ def train(dataset, model, args, same_feat=True, val_dataset=None, test_dataset=N
             assign_input = Variable(data['assign_feats'].float(), requires_grad=False).cuda()
 
             ypred = model(h0, adj, batch_num_nodes, assign_x=assign_input)
+            if batch_idx < 5:
+              predictions += ypred.cpu().detach().numpy().tolist()
+            
             if not args.method == 'soft-assign' or not args.linkpred:
                 loss = model.loss(ypred, label)
             else:
@@ -267,11 +282,11 @@ def train(dataset, model, args, same_feat=True, val_dataset=None, test_dataset=N
     plt.close()
     matplotlib.style.use('default')
 
-    predictions = ypred.cpu().detach().numpy()
-    print(predictions.shape, np.expand_dims(predictions, axis=0))
-    cg_data = {'adj': data['adj'],
-                'feat': data['feats'],
-                'label': data['label'],
+    print(all_adjs.shape, all_feats.shape, all_labels.shape)
+
+    cg_data = {'adj': all_adjs,
+                'feat': all_feats,
+                'label': all_labels,
                 'pred': np.expand_dims(predictions, axis=0), 
                 'train_idx': list(range(len(dataset)))}
     io_utils.save_checkpoint(model, optimizer, args, num_epochs=-1, cg_dict=cg_data)
