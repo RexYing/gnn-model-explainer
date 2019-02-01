@@ -19,6 +19,8 @@ import shutil
 import time
 
 import gengraph
+from graph_sampler import GraphSampler
+import load_data
 import utils.io_utils as io_utils
 import utils.parser_utils as parser_utils
 import utils.train_utils as train_utils
@@ -485,6 +487,7 @@ def pkl_task(args, feat=None):
 
 def benchmark_task(args, writer=None, feat='node-label'):
     graphs = load_data.read_graphfile(args.datadir, args.bmname, max_nodes=args.max_nodes)
+    print(max([G.graph['label'] for G in graphs]))
     
     if feat == 'node-feat' and 'feat_dim' in graphs[0].graph:
         print('Using node features')
@@ -684,7 +687,8 @@ def main():
         print('Using CPU')
 
     if prog_args.bmname is not None:
-        benchmark_task_val(prog_args, writer=writer)
+        #benchmark_task_val(prog_args, writer=writer)
+        benchmark_task(prog_args, writer=writer)
     elif prog_args.pkl_fname is not None:
         pkl_task(prog_args)
     elif prog_args.dataset is not None:
