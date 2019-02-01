@@ -63,8 +63,11 @@ def arg_parse():
             help='Whether to add bias. Default to True.')
     parser.add_argument('--explain-node', dest='explain_node', type=int,
             help='Node to explain.')
-    parser.add_argument('--explain-graph', dest='explain_graph', type=int,
+    parser.add_argument('--graph-idx', dest='graph_idx', type=int,
             help='Graph to explain.')
+    parser.add_argument('--graph-mode', dest='graph_mode', action='store_const',
+            const=True, default=False,
+            help='whether to run Explainer on Graph Classification task.')
     parser.add_argument('--align-steps', dest='align_steps', type=int,
             help='Number of iterations to find P, the alignment matrix.')
 
@@ -91,7 +94,7 @@ def arg_parse():
                         name_suffix='',
                         align_steps=1000,
                         explain_node=None,
-                        explain_graph=None,
+                        graph_idx=0,
                         mask_act='sigmoid'
                        )
     return parser.parse_args()
@@ -120,7 +123,7 @@ def main():
     num_classes = cg_dict['pred'].shape[2]
     print('input dim: ', input_dim, '; num classes: ', num_classes)
 
-    graph_mode = prog_args.explain_graph is not None
+    graph_mode = prog_args.graph_mode
 
     # build model
     if prog_args.method == 'attn':
@@ -137,16 +140,15 @@ def main():
             model = model.cuda()
         model.load_state_dict(ckpt['model_state'])
 
-
         explainer = explain.Explainer(model, cg_dict['adj'], cg_dict['feat'],
                                       cg_dict['label'], cg_dict['pred'], cg_dict['train_idx'],
-                                      prog_args, writer=writer, print_training=True, graph_mode=graph_mode)
+                                      prog_args, writer=writer, print_training=True, graph_mode=graph_mode, 
+                                      graph_idx=prog_args.graph_idx)
         train_idx = cg_dict['train_idx']
         if prog_args.explain_node is not None:
             explainer.explain(prog_args.explain_node, unconstrained=False)
         elif graph_mode:
-           print("Explainer")
-           explainer.explain(node_idx=0, explain_graph=True, unconstrained=False)
+            explainer.explain(node_idx=0, graph_idx=prog_args.graph_idx, graph_mode=True, unconstrained=False)
         else:
             # explain a set of nodes
             masked_adj = explainer.explain_nodes([370,390], prog_args)
