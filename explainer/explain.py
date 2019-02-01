@@ -135,13 +135,13 @@ class Explainer:
         pred_label = np.argmax(self.pred[graph_idx][neighbors], axis=1)
         print('pred label: ', pred_label[node_idx_new])
 
-        f_test = self.embedding[graph_idx, node_idx, :]
-        f_idx = self.embedding[graph_idx, self.train_idx, :]
-        alpha = self.alpha[graph_idx, self.train_idx, pred_label[node_idx_new]]
-        sim_val = f_idx @ f_test
-        rep_val = sim_val * alpha
-        if self.writer is not None:
-            self.log_representer(rep_val, sim_val, alpha)
+        #f_test = self.embedding[graph_idx, node_idx, :]
+        #f_idx = self.embedding[graph_idx, self.train_idx, :]
+        #alpha = self.alpha[graph_idx, self.train_idx, pred_label[node_idx_new]]
+        #sim_val = f_idx @ f_test
+        #rep_val = sim_val * alpha
+        #if self.writer is not None:
+        #    self.log_representer(rep_val, sim_val, alpha)
 
         explainer = ExplainModule(adj, x, self.model, label, self.args, writer=self.writer)
         if self.args.gpu:
@@ -151,6 +151,7 @@ class Explainer:
         explainer.train()
         begin_time = time.time()
         for epoch in range(self.args.num_epochs):
+            explainer.zero_grad()
             explainer.optimizer.zero_grad()
             ypred = explainer(node_idx_new, unconstrained=unconstrained)
             loss = explainer.loss(ypred, pred_label, node_idx_new, epoch)
@@ -171,7 +172,7 @@ class Explainer:
                 self.writer.add_scalar('optimization/lr', explainer.optimizer.param_groups[0]['lr'], epoch)
                 if epoch % 100 == 0:
                     explainer.log_mask(epoch)
-                    explainer.log_masked_adj(node_idx_new, epoch)
+                    explainer.log_masked_adj(node_idx_new, epoch, label=sub_label.squeeze())
                     explainer.log_adj_grad(node_idx_new, pred_label, epoch)
 
         print('finished training in ', time.time() - begin_time)
@@ -181,7 +182,7 @@ class Explainer:
     def remove_low_weight_edges(self):
         d
 
-    def align(self, ref_feat, ref_adj, curr_feat, curr_adj, args):
+    def align(self, ref_feat, ref_adj, ref_node_idx, curr_feat, curr_adj, curr_node_idx, args):
         ref_adj = torch.FloatTensor(ref_adj)
         curr_adj = torch.FloatTensor(curr_adj)
 
@@ -192,19 +193,23 @@ class Explainer:
         P = nn.Parameter(torch.FloatTensor(ref_adj.shape[0], curr_adj.shape[0]))
         with torch.no_grad():
             nn.init.constant_(P, 1.0/ref_adj.shape[0])
+            P[ref_node_idx, :] = 0.0
+            P[:, curr_node_idx] = 0.0
+            P[ref_node_idx, curr_node_idx] = 1.0
         opt = torch.optim.Adam([P], lr=.01, betas=(0.5, 0.999))
-        io_utils.log_matrix(self.writer, P, 'align/P', 0)
         for i in range(args.align_steps):
             opt.zero_grad()
             feat_loss  = torch.norm(P @ curr_feat - ref_feat)
-            align_loss = torch.norm(P @ curr_adj @ torch.transpose(P,0,1) - ref_adj)
+
+            aligned_adj = P @ curr_adj @ torch.transpose(P, 0, 1)
+            align_loss = torch.norm(aligned_adj - ref_adj)
             loss =  feat_loss + align_loss
             loss.backward() # Calculate gradients
             self.writer.add_scalar('optimization/align_loss', loss, i)
             print('iter: ', i, '; loss: ', loss)
             opt.step()
 
-        return P, P @ curr_adj, P @ curr_feat
+        return P, aligned_adj, P @ curr_feat
 
     def explain_nodes(self, node_indices, args, graph_idx=0):
         masked_adjs = [self.explain(node_idx, graph_idx=graph_idx) for node_idx in node_indices]
@@ -216,19 +221,39 @@ class Explainer:
         new_ref_idx, _, ref_feat,_,_ = self.extract_neighborhood(ref_idx)
         new_curr_idx, _, curr_feat,_,_   = self.extract_neighborhood(curr_idx)
 
-        G_ref = io_utils.denoise_graph(ref_adj, new_ref_idx, ref_feat, threshold=0.5)
+        G_ref = io_utils.denoise_graph(ref_adj, new_ref_idx, ref_feat, threshold=0.1)
         denoised_ref_feat = np.array([G_ref.node[node]['feat'] for node in G_ref.nodes()])
         denoised_ref_adj = nx.to_numpy_matrix(G_ref)
+        # ref center node
+        ref_node_idx = list(G_ref.nodes()).index(new_ref_idx)
 
-        G_curr = io_utils.denoise_graph(curr_adj, new_curr_idx, ref_feat, threshold=0.5)
+        G_curr = io_utils.denoise_graph(curr_adj, new_curr_idx, curr_feat, threshold=0.1)
         denoised_curr_feat = np.array([G_curr.node[node]['feat'] for node in G_curr.nodes()])
         denoised_curr_adj = nx.to_numpy_matrix(G_curr)
+        # curr center node
+        curr_node_idx = list(G_curr.nodes()).index(new_curr_idx)
 
-        P, aligned_adj, aligned_feat = self.align(denoised_ref_feat, denoised_ref_adj,
-                denoised_curr_feat, denoised_curr_adj, args=args)
+        P, aligned_adj, aligned_feat = self.align(denoised_ref_feat, denoised_ref_adj, ref_node_idx,
+                denoised_curr_feat, denoised_curr_adj, curr_node_idx, args=args)
+        io_utils.log_matrix(self.writer, P, 'align/P', 0)
 
+        G_ref = nx.convert_node_labels_to_integers(G_ref)
         io_utils.log_graph(self.writer, G_ref, 'align/ref')
+        G_curr = nx.convert_node_labels_to_integers(G_curr)
         io_utils.log_graph(self.writer, G_curr, 'align/before')
+
+        P = P.cpu().detach().numpy()
+        aligned_adj = aligned_adj.cpu().detach().numpy()
+        aligned_feat = aligned_feat.cpu().detach().numpy()
+
+        aligned_idx = np.argmax(P[:, curr_node_idx])
+        #print(list(G_curr.nodes()))
+        print('aligned self: ', aligned_idx)
+        #print('feat: ', aligned_feat.shape)
+        #print('aligned adj: ', aligned_adj.shape)
+        G_aligned = io_utils.denoise_graph(aligned_adj, aligned_idx, aligned_feat, threshold=0.5)
+        io_utils.log_graph(self.writer, G_aligned, 'mask/aligned')
+        
         #io_utils.log_graph(self.writer, aligned_adj.cpu().detach().numpy(), new_curr_idx,
         #        'align/aligned', epoch=1)
 
@@ -348,12 +373,13 @@ class ExplainModule(nn.Module):
         self.graph_idx = graph_idx
         self.args = args
         self.writer = writer
+        self.mask_act = args.mask_act
         self.use_sigmoid = use_sigmoid
 
         init_strategy='normal'
         num_nodes = adj.size()[1]
         self.mask, self.mask_bias = self.construct_edge_mask(num_nodes, init_strategy=init_strategy)
-        self.feat_mask = self.construct_feat_mask(x.size(-1))
+        self.feat_mask = self.construct_feat_mask(x.size(-1), init_strategy='constant')
         params = [self.mask, self.feat_mask]
         if self.mask_bias is not None:
             params.append(self.mask_bias)
@@ -364,7 +390,7 @@ class ExplainModule(nn.Module):
 
         self.scheduler, self.optimizer = train_utils.build_optimizer(args, params)
 
-        self.coeffs = {'size': 4.0, 'feat_size': 0.1, 'ent': 0.1,
+        self.coeffs = {'size': 0.0005, 'feat_size': 1.0, 'ent': 1.0,
                 'feat_ent':0.1, 'grad': 0, 'lap': 1.0}
 
         # ypred = self.model(x, adj)[graph_idx][node_idx]
@@ -379,6 +405,10 @@ class ExplainModule(nn.Module):
             std = 0.1
             with torch.no_grad():
                 mask.normal_(1.0, std)
+        elif init_strategy == 'constant':
+            with torch.no_grad():
+                nn.init.constant_(mask, 0.0)
+                #mask[0] = 2
         return mask
 
     def construct_edge_mask(self, num_nodes, init_strategy='normal', const_val=1.0):
@@ -400,8 +430,11 @@ class ExplainModule(nn.Module):
         return mask, mask_bias
 
     def _masked_adj(self):
-        sym_mask = torch.sigmoid(self.mask) if self.use_sigmoid else self.mask
-        #sym_mask = nn.ReLU()(self.mask) if self.use_sigmoid else self.mask
+        sym_mask = self.mask
+        if self.mask_act == 'sigmoid':
+            sym_mask = torch.sigmoid(self.mask)
+        elif self.mask_act == 'ReLU':
+            sym_mask = nn.ReLU()(self.mask)
         sym_mask = (sym_mask + sym_mask.t()) / 2
         adj = self.adj.cuda() if self.args.gpu else self.adj
         masked_adj = adj * sym_mask
@@ -425,7 +458,11 @@ class ExplainModule(nn.Module):
         else:
             self.masked_adj = self._masked_adj()
             feat_mask = torch.sigmoid(self.feat_mask) if self.use_sigmoid else self.feat_mask
+            #std_tensor = torch.ones_like(x, dtype=torch.float) / 2
+            #mean_tensor = torch.zeros_like(x, dtype=torch.float) - x
+            #z = torch.normal(mean=mean_tensor, std=std_tensor)
             x = x * feat_mask
+            #x = x + z * (1 - feat_mask)
 
         ypred = self.model(x, self.masked_adj)
         node_pred = ypred[self.graph_idx, node_idx, :]
@@ -464,12 +501,16 @@ class ExplainModule(nn.Module):
         pred_loss = -torch.log(logit)
 
         # size
-        mask = torch.sigmoid(self.mask) if self.use_sigmoid else self.mask
-        #mask = nn.ReLU()(self.mask) if self.use_sigmoid else self.mask
-        size_loss = self.coeffs['size'] * torch.mean(mask)
+        mask = self.mask
+        if self.mask_act == 'sigmoid':
+            mask = torch.sigmoid(self.mask)
+        elif self.mask_act == 'ReLU':
+            mask = nn.ReLU()(self.mask)
+        size_loss = self.coeffs['size'] * torch.sum(mask)
 
+        #pre_mask_sum = torch.sum(self.feat_mask)
         feat_mask = torch.sigmoid(self.feat_mask) if self.use_sigmoid else self.feat_mask
-        feat_size_loss = self.coeffs['feat_size'] * torch.mean(feat_mask)
+        feat_size_loss = self.coeffs['feat_size'] * torch.mean(feat_mask) 
 
         # entropy
         mask_ent = -mask * torch.log(mask) - (1-mask) * torch.log(1-mask)
@@ -501,7 +542,7 @@ class ExplainModule(nn.Module):
         # x_grad_sum = torch.sum(x_grad, 1)
         #grad_feat_loss = self.coeffs['featgrad'] * -torch.mean(x_grad_sum * mask)
 
-        loss = pred_loss + size_loss + lap_loss
+        loss = pred_loss + size_loss + lap_loss + mask_ent_loss + feat_size_loss
         if self.writer is not None:
             self.writer.add_scalar('optimization/size_loss', size_loss, epoch)
             self.writer.add_scalar('optimization/feat_size_loss', feat_size_loss, epoch)
@@ -556,15 +597,17 @@ class ExplainModule(nn.Module):
 
 
     def log_adj_grad(self, node_idx, pred_label, epoch):
+        if self.adj.grad is not None:
+            io_utils.log_matrix(self.writer, self.adj.grad.squeeze(), 'grad/adj1', epoch)
         adj_grad = torch.abs(self.adj_feat_grad(node_idx, pred_label[node_idx])[0])[self.graph_idx]
         adj_grad = adj_grad + adj_grad.t()
         io_utils.log_matrix(self.writer, adj_grad, 'grad/adj', epoch)
         #self.adj.requires_grad = False
 
-    def log_masked_adj(self, node_idx, epoch):
+    def log_masked_adj(self, node_idx, epoch, label=None):
         # use [0] to remove the batch dim
         masked_adj = self.masked_adj[0].cpu().detach().numpy()
-        G = io_utils.denoise_graph(masked_adj, node_idx)
+        G = io_utils.denoise_graph(masked_adj, node_idx, label=label)
         io_utils.log_graph(self.writer, G, name='mask/graph', epoch=epoch)
         #num_nodes = self.adj.size()[-1]
         #G = nx.Graph()

@@ -89,6 +89,23 @@ def diamond(start, role_start=0):
     return graph, roles
 
 
+def tree(start, height, r=2, role_start=0):
+    '''Builds a balanced r-tree of height h
+    INPUT:
+    -------------
+    start       :    starting index for the shape
+    height      :    int height of the tree 
+    r           :    int number of branches per node 
+    role_start  :    starting index for the roles
+    OUTPUT:
+    -------------
+    graph       :    a tree shape graph, with ids beginning at start
+    roles       :    list of the roles of the nodes (indexed starting at role_start)
+    '''
+    graph = nx.balanced_tree(r, height)
+    roles = [0] * graph.number_of_nodes()
+    return graph, roles
+
 def fan(start, nb_branches, role_start=0):
     '''Builds a fan-like graph, with index of nodes starting at start
     and role_ids at role_start
@@ -228,7 +245,11 @@ def build_graph(width_basis, basis_type, list_shapes, start=0, rdm_basis_plugins
     role_ids         :      labels for each role
     plugins          :      node ids with the attached shapes
     '''
-    basis, role_id = eval(basis_type)(start, width_basis, m=m)
+    if basis_type =='ba':
+      basis, role_id = eval(basis_type)(start, width_basis, m=m)
+    else:
+      basis, role_id = eval(basis_type)(start, width_basis)
+
     n_basis, n_shapes = nx.number_of_nodes(basis), len(list_shapes)
     start += n_basis        # indicator of the id of the next node
 
@@ -259,6 +280,11 @@ def build_graph(width_basis, basis_type, list_shapes, start=0, rdm_basis_plugins
         basis.add_nodes_from(graph_s.nodes())
         basis.add_edges_from(graph_s.edges())
         basis.add_edges_from([(start, plugins[shape_id])])
+        if shape_type=='cycle':
+          if np.random.random() > 0.5:
+            a = np.random.randint(1,4)
+            b = np.random.randint(1,4)
+            basis.add_edges_from([(a+start, b+plugins[shape_id])])
         #role_id[plugins[shape_id]] += (-2 - 10 * seen_shapes[shape_type][0])
         temp_labels = [r + col_start for r in roles_graph_s]
         #temp_labels[0] += 100 * seen_shapes[shape_type][0]

@@ -56,12 +56,14 @@ def arg_parse():
             const=False, default=True,
             help='Whether to add bias. Default to True.')
     # Explainer
+    parser.add_argument('--mask-act', dest='mask_act', type=str,
+            help='sigmoid, ReLU.')
     parser.add_argument('--mask-bias', dest='mask_bias', action='store_const',
             const=True, default=False,
             help='Whether to add bias. Default to True.')
     parser.add_argument('--explain-node', dest='explain_node', type=int,
             help='Node to explain.')
-    parser.add_argument('--align_steps', dest='align_steps', type=int,
+    parser.add_argument('--align-steps', dest='align_steps', type=int,
             help='Number of iterations to find P, the alignment matrix.')
 
     parser.add_argument('--method', dest='method',
@@ -86,7 +88,8 @@ def arg_parse():
                         method='base',
                         name_suffix='',
                         align_steps=1000,
-                        explain_node=420
+                        explain_node=None,
+                        mask_act='sigmoid'
                        )
     return parser.parse_args()
 
@@ -129,16 +132,13 @@ def main():
                                       cg_dict['label'], cg_dict['pred'], cg_dict['train_idx'],
                                       prog_args, writer=writer, print_training=True)
         train_idx = cg_dict['train_idx']
-#        explainer.explain(prog_args.explain_node, unconstrained=False)
+        if prog_args.explain_node is not None:
+            explainer.explain(prog_args.explain_node, unconstrained=False)
+        else:
+            # explain a set of nodes
+            masked_adj = explainer.explain_nodes([370,390], prog_args)
+            #pickle.dump(masked_adj, open('out/masked_adjs.pkl', 'wb'))
 
-        # explain a set of nodes
-        masked_adj = explainer.explain_nodes([420,440], prog_args)
-
-
-
-        #pickle.dump(masked_adj, open('out/masked_adjs.pkl', 'wb'))
-
-        #print(masked_adj[3])
 
         
 if __name__ == "__main__":

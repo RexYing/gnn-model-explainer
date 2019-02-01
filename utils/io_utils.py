@@ -70,14 +70,18 @@ def log_matrix(writer, mat, name, epoch, fig_size=(8,6), dpi=200):
     fig.canvas.draw()
     writer.add_image(name, tensorboardX.utils.figure_to_image(fig), epoch)
 
-def denoise_graph(adj, node_idx, feat=None, threshold=0.1):
+def denoise_graph(adj, node_idx, feat=None, label=None, threshold=0.1):
     num_nodes = adj.shape[-1]
     G = nx.Graph()
     G.add_nodes_from(range(num_nodes))
-    G.node[node_idx]['color'] = 0
+    G.node[node_idx]['self'] = 1
+    #print('num nodes : ', G.number_of_nodes())
     if feat is not None:
         for node in G.nodes():
             G.node[node]['feat'] = feat[node]
+    if label is not None:
+        for node in G.nodes():
+            G.node[node]['label'] = label[node]
     weighted_edge_list = [(i, j, adj[i, j]) for i in range(num_nodes) for j in range(num_nodes) if
             adj[i,j] > threshold]
     G.add_weighted_edges_from(weighted_edge_list)
@@ -88,8 +92,15 @@ def log_graph(writer, Gc, name, epoch=0, fig_size=(4,3), dpi=300):
     plt.switch_backend('agg')
     fig = plt.figure(figsize=fig_size, dpi=dpi)
    
-    edge_colors = [Gc[i][j]['weight'] for (i,j) in Gc.edges()]
-    node_colors = [Gc.node[i]['color'] if 'color' in Gc.node[i] else 1 for i in Gc.nodes()]
+    node_colors = []
+    edge_colors = [min(max(w, 0.0), 1.0) for (u,v,w) in Gc.edges.data('weight', default=1)]
+    for i in Gc.nodes():
+        if 'self' in Gc.node[i]:
+            node_colors.append(0)
+        elif 'label' in Gc.node[i]:
+            node_colors.append(Gc.node[i]['label'] + 1)
+        else:
+            node_colors.append(1)
 
     plt.switch_backend('agg')
     fig = plt.figure(figsize=fig_size, dpi=dpi)
@@ -98,9 +109,10 @@ def log_graph(writer, Gc, name, epoch=0, fig_size=(4,3), dpi=300):
             edge_color=edge_colors, edge_cmap=plt.get_cmap('Greys'), edge_vmin=0.0, edge_vmax=1.0,
             width=0.5, node_size=25,
             alpha=0.7)
-    #plt.imshow(np.random.rand(5,5), cmap=plt.get_cmap('BuPu'))
     fig.axes[0].xaxis.set_visible(False)
     fig.canvas.draw()
-    writer.add_image(name, tensorboardX.utils.figure_to_image(fig), epoch)
+    plt.savefig('log/' + name)
+    img = tensorboardX.utils.figure_to_image(fig)
+    writer.add_image(name, img, epoch)
 
 
