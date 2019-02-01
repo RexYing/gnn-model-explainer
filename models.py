@@ -160,6 +160,7 @@ class GcnEncoderGraph(nn.Module):
         x_tensor = torch.cat(x_all, dim=2)
         if embedding_mask is not None:
             x_tensor = x_tensor * embedding_mask
+        self.embedding_tensor = x_tensor
         return x_tensor
 
     def forward(self, x, adj, batch_num_nodes=None, **kwargs):
@@ -199,6 +200,7 @@ class GcnEncoderGraph(nn.Module):
             output = torch.cat(out_all, dim=1)
         else:
             output = out
+        self.embedding_tensor = output
         ypred = self.pred_model(output)
         #print(output.size())
         return ypred

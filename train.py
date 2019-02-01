@@ -268,7 +268,7 @@ def train(dataset, model, args, same_feat=True, val_dataset=None, test_dataset=N
     matplotlib.style.use('default')
 
     predictions = ypred.cpu().detach().numpy()
-
+    print(predictions.shape, np.expand_dims(predictions, axis=0))
     cg_data = {'adj': data['adj'],
                 'feat': data['feats'],
                 'label': data['label'],
@@ -656,7 +656,7 @@ def arg_parse():
                         dataset='syn1',
                         opt='adam',   # opt_parser
                         opt_scheduler='none',
-                        max_nodes=1000,
+                        max_nodes=100,
                         cuda='1',
                         feature_type='default',
                         lr=0.001,
