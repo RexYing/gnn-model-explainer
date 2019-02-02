@@ -68,6 +68,9 @@ def arg_parse():
     parser.add_argument('--graph-mode', dest='graph_mode', action='store_const',
             const=True, default=False,
             help='whether to run Explainer on Graph Classification task.')
+    parser.add_argument('--multigraph-mode', dest='multigraph_mode', action='store_const',
+            const=True, default=False,
+            help='whether to run Explainer on multiple Graphs from the Classification task.')
     parser.add_argument('--align-steps', dest='align_steps', type=int,
             help='Number of iterations to find P, the alignment matrix.')
 
@@ -123,7 +126,7 @@ def main():
     num_classes = cg_dict['pred'].shape[2]
     print('input dim: ', input_dim, '; num classes: ', num_classes)
 
-    graph_mode = prog_args.graph_mode
+    graph_mode = prog_args.graph_mode or prog_args.multigraph_mode
 
     # build model
     if prog_args.method == 'attn':
@@ -148,7 +151,10 @@ def main():
         if prog_args.explain_node is not None:
             explainer.explain(prog_args.explain_node, unconstrained=False)
         elif graph_mode:
-            explainer.explain(node_idx=0, graph_idx=prog_args.graph_idx, graph_mode=True, unconstrained=False)
+            if prog_args.multigraph_mode:
+              explainer.explain_graphs(graph_indices=[1,2,3,4])
+            else:
+              explainer.explain(node_idx=0, graph_idx=prog_args.graph_idx, graph_mode=True, unconstrained=False)
         else:
             # explain a set of nodes
             masked_adj = explainer.explain_nodes([370,390], prog_args)

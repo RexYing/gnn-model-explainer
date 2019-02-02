@@ -268,6 +268,22 @@ class Explainer:
 
         return masked_adjs
 
+    def explain_graphs(self, graph_indices):
+        masked_adjs = []
+
+        for graph_idx in graph_indices:
+          masked_adj = self.explain(node_idx=0, graph_idx=graph_idx, graph_mode=True)
+          G_denoised = io_utils.denoise_graph(masked_adj, 0, threshold=0.5)
+          label = self.label[graph_idx]
+          io_utils.log_graph(self.writer, G_denoised, 'graph/graphidx_{}_label={}'.format(graph_idx, label))
+          masked_adjs.append(masked_adj)
+          
+          G_orig = io_utils.denoise_graph(self.adj[graph_idx], 0, threshold=0) 
+          #G_orig = nx.from_numpy_matrix(self.adj[graph_idx].cpu().detach().numpy())
+          io_utils.log_graph(self.writer, G_orig, 'graph/graphidx_{}'.format(graph_idx))
+
+        return masked_adjs
+
     def log_representer(self, rep_val, sim_val, alpha, graph_idx=0):
 
         rep_val = rep_val.cpu().detach().numpy()
