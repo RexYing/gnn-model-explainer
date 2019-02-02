@@ -275,11 +275,11 @@ class Explainer:
           masked_adj = self.explain(node_idx=0, graph_idx=graph_idx, graph_mode=True)
           G_denoised = io_utils.denoise_graph(masked_adj, 0, threshold=0.5)
           label = self.label[graph_idx]
-          io_utils.log_graph(self.writer, G_denoised, 'graph/clf_{}_label={}'.format(graph_idx, label))
+          io_utils.log_graph(self.writer, G_denoised, 'graph/graphidx_{}_label={}'.format(graph_idx, label))
           masked_adjs.append(masked_adj)
           
           G_orig = io_utils.denoise_graph(self.adj[graph_idx], 0) 
-          io_utils.log_graph(self.writer, G_orig, 'graph/original_{}'.format(graph_idx))
+          io_utils.log_graph(self.writer, G_orig, 'graph/graphidx_{}'.format(graph_idx))
 
         return masked_adjs
 
