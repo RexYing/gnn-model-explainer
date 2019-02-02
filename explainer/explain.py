@@ -363,7 +363,7 @@ class ExplainModule(nn.Module):
 
         self.scheduler, self.optimizer = train_utils.build_optimizer(args, params)
 
-        self.coeffs = {'size': 0.0005, 'feat_size': 1.0, 'ent': 1.0,
+        self.coeffs = {'size': 0.001, 'feat_size': 1.0, 'ent': 1.0,
                 'feat_ent':0.1, 'grad': 0, 'lap': 1.0}
 
         # ypred = self.model(x, adj)[graph_idx][node_idx]
@@ -479,6 +479,7 @@ class ExplainModule(nn.Module):
         gt_label_node = self.label if self.graph_mode else self.label[0][node_idx]
         logit = pred[gt_label_node] 
         pred_loss = -torch.log(logit)
+        pred_loss = - torch.sum(pred * torch.log(pred))
         # size
         mask = self.mask
         if self.mask_act == 'sigmoid':
