@@ -63,6 +63,14 @@ def arg_parse():
             help='Whether to add bias. Default to True.')
     parser.add_argument('--explain-node', dest='explain_node', type=int,
             help='Node to explain.')
+    parser.add_argument('--graph-idx', dest='graph_idx', type=int,
+            help='Graph to explain.')
+    parser.add_argument('--graph-mode', dest='graph_mode', action='store_const',
+            const=True, default=False,
+            help='whether to run Explainer on Graph Classification task.')
+    parser.add_argument('--multigraph-mode', dest='multigraph_mode', action='store_const',
+            const=True, default=False,
+            help='whether to run Explainer on multiple Graphs from the Classification task.')
     parser.add_argument('--align-steps', dest='align_steps', type=int,
             help='Number of iterations to find P, the alignment matrix.')
 
@@ -89,6 +97,7 @@ def arg_parse():
                         name_suffix='',
                         align_steps=1000,
                         explain_node=None,
+                        graph_idx=0,
                         mask_act='sigmoid'
                        )
     return parser.parse_args()
@@ -117,12 +126,18 @@ def main():
     num_classes = cg_dict['pred'].shape[2]
     print('input dim: ', input_dim, '; num classes: ', num_classes)
 
+    graph_mode = prog_args.graph_mode or prog_args.multigraph_mode
+
     # build model
     if prog_args.method == 'attn':
         print('Method: attn')
     else:
         print('Method: base')
-        model = models.GcnEncoderNode(input_dim, prog_args.hidden_dim, prog_args.output_dim, num_classes,
+        if graph_mode:
+          model = models.GcnEncoderGraph(input_dim, prog_args.hidden_dim, prog_args.output_dim, num_classes,
+                                       prog_args.num_gc_layers, bn=prog_args.bn, args=prog_args)
+        else:
+          model = models.GcnEncoderNode(input_dim, prog_args.hidden_dim, prog_args.output_dim, num_classes,
                                        prog_args.num_gc_layers, bn=prog_args.bn, args=prog_args)
         if prog_args.gpu:
             model = model.cuda()
@@ -130,10 +145,16 @@ def main():
 
         explainer = explain.Explainer(model, cg_dict['adj'], cg_dict['feat'],
                                       cg_dict['label'], cg_dict['pred'], cg_dict['train_idx'],
-                                      prog_args, writer=writer, print_training=True)
+                                      prog_args, writer=writer, print_training=True, graph_mode=graph_mode, 
+                                      graph_idx=prog_args.graph_idx)
         train_idx = cg_dict['train_idx']
         if prog_args.explain_node is not None:
             explainer.explain(prog_args.explain_node, unconstrained=False)
+        elif graph_mode:
+            if prog_args.multigraph_mode:
+              explainer.explain_graphs(graph_indices=[1,2,3,4])
+            else:
+              explainer.explain(node_idx=0, graph_idx=prog_args.graph_idx, graph_mode=True, unconstrained=False)
         else:
             # explain a set of nodes
             # masked_adj = explainer.explain_nodes([370,390], prog_args)

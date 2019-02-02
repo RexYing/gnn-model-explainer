@@ -19,6 +19,10 @@ import shutil
 import time
 
 import gengraph
+from graph_sampler import GraphSampler
+import load_data
+
+import utils.math_utils as math_utils
 import utils.io_utils as io_utils
 import utils.parser_utils as parser_utils
 import utils.train_utils as train_utils
@@ -184,13 +188,25 @@ def train(dataset, model, args, same_feat=True, val_dataset=None, test_dataset=N
     test_accs = []
     test_epochs = []
     val_accs = []
+    
     for epoch in range(args.num_epochs):
         begin_time = time.time()
         avg_loss = 0.0
         model.train()
+        predictions = []
         print('Epoch: ', epoch)
         for batch_idx, data in enumerate(dataset):
             model.zero_grad()
+            if batch_idx==0:
+              prev_adjs = data['adj']; prev_feats = data['feats']; prev_labels = data['label']
+              all_adjs = prev_adjs   ; all_feats = prev_feats    ; all_labels = prev_labels
+            elif batch_idx < 5:
+              prev_adjs   = data['adj']
+              prev_feats  = data['feats']
+              prev_labels = data['label']
+              all_adjs    = torch.cat((all_adjs,   prev_adjs),   dim=0)
+              all_feats   = torch.cat((all_feats,  prev_feats),  dim=0)
+              all_labels  = torch.cat((all_labels, prev_labels), dim=0)
             adj = Variable(data['adj'].float(), requires_grad=False).cuda()
             h0 = Variable(data['feats'].float(), requires_grad=False).cuda()
             label = Variable(data['label'].long()).cuda()
@@ -198,6 +214,9 @@ def train(dataset, model, args, same_feat=True, val_dataset=None, test_dataset=N
             assign_input = Variable(data['assign_feats'].float(), requires_grad=False).cuda()
 
             ypred = model(h0, adj, batch_num_nodes, assign_x=assign_input)
+            if batch_idx < 5:
+              predictions += ypred.cpu().detach().numpy().tolist()
+            
             if not args.method == 'soft-assign' or not args.linkpred:
                 loss = model.loss(ypred, label)
             else:
@@ -252,7 +271,7 @@ def train(dataset, model, args, same_feat=True, val_dataset=None, test_dataset=N
     matplotlib.style.use('seaborn')
     plt.switch_backend('agg')
     plt.figure()
-    plt.plot(train_epochs, util.exp_moving_avg(train_accs, 0.85), '-', lw=1)
+    plt.plot(train_epochs, math_utils.exp_moving_avg(train_accs, 0.85), '-', lw=1)
     if test_dataset is not None:
         plt.plot(best_val_epochs, best_val_accs, 'bo', test_epochs, test_accs, 'go')
         plt.legend(['train', 'val', 'test'])
@@ -263,6 +282,14 @@ def train(dataset, model, args, same_feat=True, val_dataset=None, test_dataset=N
     plt.close()
     matplotlib.style.use('default')
 
+    print(all_adjs.shape, all_feats.shape, all_labels.shape)
+
+    cg_data = {'adj': all_adjs,
+                'feat': all_feats,
+                'label': all_labels,
+                'pred': np.expand_dims(predictions, axis=0), 
+                'train_idx': list(range(len(dataset)))}
+    io_utils.save_checkpoint(model, optimizer, args, num_epochs=-1, cg_dict=cg_data)
     return model, val_accs
 
 def train_node_classifier(G, labels, model, args, writer=None):
@@ -485,6 +512,7 @@ def pkl_task(args, feat=None):
 
 def benchmark_task(args, writer=None, feat='node-label'):
     graphs = load_data.read_graphfile(args.datadir, args.bmname, max_nodes=args.max_nodes)
+    print(max([G.graph['label'] for G in graphs]))
     
     if feat == 'node-feat' and 'feat_dim' in graphs[0].graph:
         print('Using node features')
@@ -643,7 +671,7 @@ def arg_parse():
                         dataset='syn1',
                         opt='adam',   # opt_parser
                         opt_scheduler='none',
-                        max_nodes=1000,
+                        max_nodes=100,
                         cuda='1',
                         feature_type='default',
                         lr=0.001,
@@ -684,7 +712,8 @@ def main():
         print('Using CPU')
 
     if prog_args.bmname is not None:
-        benchmark_task_val(prog_args, writer=writer)
+        #benchmark_task_val(prog_args, writer=writer)
+        benchmark_task(prog_args, writer=writer)
     elif prog_args.pkl_fname is not None:
         pkl_task(prog_args)
     elif prog_args.dataset is not None:

@@ -43,7 +43,6 @@ class GraphConv(nn.Module):
         if self.add_self:
             self_emb = torch.matmul(x, self.self_weight)
             y += self_emb
-        #y = torch.matmul(y,self.weight)
         if self.bias is not None:
             y = y + self.bias
         if self.normalize_embedding:
@@ -54,10 +53,10 @@ class GraphConv(nn.Module):
 
 class GcnEncoderGraph(nn.Module):
     def __init__(self, input_dim, hidden_dim, embedding_dim, label_dim, num_layers,
-            pred_hidden_dims=[], concat=True, bn=True, dropout=0.0, args=None):
+            pred_hidden_dims=[], concat=True, bn=True, dropout=0.0, add_self=False, args=None):
         super(GcnEncoderGraph, self).__init__()
         self.concat = concat
-        add_self = not concat
+        add_self = add_self
         self.bn = bn
         self.num_layers = num_layers
         self.num_aggs=1
@@ -161,6 +160,7 @@ class GcnEncoderGraph(nn.Module):
         x_tensor = torch.cat(x_all, dim=2)
         if embedding_mask is not None:
             x_tensor = x_tensor * embedding_mask
+        self.embedding_tensor = x_tensor
         return x_tensor
 
     def forward(self, x, adj, batch_num_nodes=None, **kwargs):
@@ -200,6 +200,7 @@ class GcnEncoderGraph(nn.Module):
             output = torch.cat(out_all, dim=1)
         else:
             output = out
+        self.embedding_tensor = output
         ypred = self.pred_model(output)
         #print(output.size())
         return ypred

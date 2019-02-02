@@ -81,7 +81,7 @@ def denoise_graph(adj, node_idx, feat=None, label=None, threshold=0.1):
             G.node[node]['feat'] = feat[node]
     if label is not None:
         for node in G.nodes():
-            G.node[node]['label'] = label[node]
+            G.node[node]['label'] = label[node] 
     weighted_edge_list = [(i, j, adj[i, j]) for i in range(num_nodes) for j in range(num_nodes) if
             adj[i,j] > threshold]
     G.add_weighted_edges_from(weighted_edge_list)
