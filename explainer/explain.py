@@ -278,7 +278,8 @@ class Explainer:
           io_utils.log_graph(self.writer, G_denoised, 'graph/graphidx_{}_label={}'.format(graph_idx, label))
           masked_adjs.append(masked_adj)
           
-          G_orig = io_utils.denoise_graph(self.adj[graph_idx], 0) 
+          G_orig = io_utils.denoise_graph(self.adj[graph_idx], 0, threshold=0) 
+          #G_orig = nx.from_numpy_matrix(self.adj[graph_idx].cpu().detach().numpy())
           io_utils.log_graph(self.writer, G_orig, 'graph/graphidx_{}'.format(graph_idx))
 
         return masked_adjs
