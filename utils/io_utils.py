@@ -1,5 +1,6 @@
 import os
 
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -88,24 +89,48 @@ def denoise_graph(adj, node_idx, feat=None, label=None, threshold=0.1):
     Gc = max(nx.connected_component_subgraphs(G), key=len) 
     return Gc
 
-def log_graph(writer, Gc, name, epoch=0, fig_size=(4,3), dpi=300):
+def log_graph(writer, Gc, name, identify_self=True, nodecolor='label', epoch=0, fig_size=(4,3), dpi=300):
+    '''
+    Args:
+        nodecolor: the color of node, can be determined by 'label', or 'feat'. For feat, it needs to
+            be one-hot'
+    '''
+    cmap = plt.get_cmap('Set1')
     plt.switch_backend('agg')
     fig = plt.figure(figsize=fig_size, dpi=dpi)
    
     node_colors = []
     edge_colors = [min(max(w, 0.0), 1.0) for (u,v,w) in Gc.edges.data('weight', default=1)]
     for i in Gc.nodes():
-        if 'self' in Gc.node[i]:
+        if nodecolor == 'feat' and 'feat' in Gc.node[i]:
+            num_classes = Gc.node[i]['feat'].size()[0]
+            if num_classes >= 20:
+                cmap = plt.get_cmap('tab20')
+            elif num_classes >= 10:
+                cmap = plt.get_cmap('tab10')
+        break
+    for i in Gc.nodes():
+        if identify_self and 'self' in Gc.node[i]:
             node_colors.append(0)
-        elif 'label' in Gc.node[i]:
+        elif nodecolor == 'label' and 'label' in Gc.node[i]:
             node_colors.append(Gc.node[i]['label'] + 1)
+        elif nodecolor == 'feat' and 'feat' in Gc.node[i]:
+            #print(Gc.node[i]['feat'])
+            feat = Gc.node[i]['feat'].numpy()
+            # idx with pos val in 1D array
+            feat_class = 0
+            for i in range(len(feat)):
+                if feat[i] == 1:
+                    feat_class = i
+                    break
+            node_colors.append(feat_class)
         else:
             node_colors.append(1)
 
     plt.switch_backend('agg')
     fig = plt.figure(figsize=fig_size, dpi=dpi)
     nx.draw(Gc, pos=nx.spring_layout(Gc), with_labels=True, font_size=4,
-            node_color=node_colors, vmin=0, vmax=8, cmap=plt.get_cmap('Set1'),
+            node_color=node_colors, vmin=0, vmax=8, cmap=cmap,
             edge_color=edge_colors, edge_cmap=plt.get_cmap('Greys'), edge_vmin=0.0, edge_vmax=1.0,
             width=0.5, node_size=25,
             alpha=0.7)
@@ -115,4 +140,36 @@ def log_graph(writer, Gc, name, epoch=0, fig_size=(4,3), dpi=300):
     img = tensorboardX.utils.figure_to_image(fig)
     writer.add_image(name, img, epoch)
 
+def plot_cmap(cmap, ncolor):
+    """ 
+    A convenient function to plot colors of a matplotlib cmap
+    Credit goes to http://gvallver.perso.univ-pau.fr/?p=712
+ 
+    Args:
+        ncolor (int): number of color to show
+        cmap: a cmap object or a matplotlib color name
+    """
+ 
+    if isinstance(cmap, str):
+        try:
+            cm = plt.get_cmap(cmap)
+        except ValueError:
+            print("WARNINGS :", cmap, " is not a known colormap")
+            cm = plt.cm.gray
+    else:
+        cm = cmap
+ 
+    with matplotlib.rc_context(matplotlib.rcParamsDefault):
+        fig = plt.figure(figsize=(6, 1), frameon=False)
+        ax = fig.add_subplot(111)
+        ax.pcolor(np.linspace(1, ncolor, ncolor).reshape(1, ncolor), cmap=cm)
+        ax.set_title(cm.name)
+        xt = ax.set_xticks([])
+        yt = ax.set_yticks([])
+    return fig
+
+def plot_cmap_tb(writer, cmap, ncolor, name):
+    fig = plot_cmap(cmap, ncolor)
+    img = tensorboardX.utils.figure_to_image(fig)
+    writer.add_image(name, img, 0)
 

@@ -187,14 +187,14 @@ class Explainer:
                       '; pred: ', ypred)
 
             single_subgraph_label = sub_label.squeeze()
-            # if self.writer is not None:
-            #     self.writer.add_scalar('mask/density', mask_density, epoch)
-            #     self.writer.add_scalar('optimization/lr', explainer.optimizer.param_groups[0]['lr'], epoch)
-            #     if epoch % 100 == 0:
-            #         explainer.log_mask(epoch)
-            #         explainer.log_masked_adj(node_idx_new, epoch, label=single_subgraph_label)
-            #         explainer.log_adj_grad(node_idx_new, pred_label, epoch,
-            #                 label=single_subgraph_label)
+            if self.writer is not None:
+                self.writer.add_scalar('mask/density', mask_density, epoch)
+                self.writer.add_scalar('optimization/lr', explainer.optimizer.param_groups[0]['lr'], epoch)
+                if epoch % 100 == 0:
+                    explainer.log_mask(epoch)
+                    explainer.log_masked_adj(node_idx_new, epoch, label=single_subgraph_label)
+                    explainer.log_adj_grad(node_idx_new, pred_label, epoch,
+                            label=single_subgraph_label)
 
         print('finished training in ', time.time() - begin_time)
         masked_adj = explainer.masked_adj[0].cpu().detach().numpy()
@@ -441,14 +441,18 @@ class Explainer:
 
         for graph_idx in graph_indices:
           masked_adj = self.explain(node_idx=0, graph_idx=graph_idx, graph_mode=True)
-          G_denoised = io_utils.denoise_graph(masked_adj, 0, threshold=0.5)
+          G_denoised = io_utils.denoise_graph(masked_adj, 0, threshold=0.05, feat=self.feat[graph_idx])
           label = self.label[graph_idx]
-          io_utils.log_graph(self.writer, G_denoised, 'graph/graphidx_{}_label={}'.format(graph_idx, label))
+          io_utils.log_graph(self.writer, G_denoised,
+                  'graph/graphidx_{}_label={}'.format(graph_idx, label), identify_self=False, nodecolor='feat')
           masked_adjs.append(masked_adj)
 
-          G_orig = io_utils.denoise_graph(self.adj[graph_idx], 0, threshold=0)
+          G_orig = io_utils.denoise_graph(self.adj[graph_idx], 0, feat=self.feat[graph_idx], threshold=0)
           #G_orig = nx.from_numpy_matrix(self.adj[graph_idx].cpu().detach().numpy())
-          io_utils.log_graph(self.writer, G_orig, 'graph/graphidx_{}'.format(graph_idx))
+          io_utils.log_graph(self.writer, G_orig, 'graph/graphidx_{}'.format(graph_idx), identify_self=False, nodecolor='feat')
+
+        # plot cmap for graphs' node features
+        io_utils.plot_cmap_tb(self.writer, 'tab20', 14, 'tab20_cmap')
 
         return masked_adjs
 
@@ -547,7 +551,7 @@ class ExplainModule(nn.Module):
 
         self.scheduler, self.optimizer = train_utils.build_optimizer(args, params)
 
-        self.coeffs = {'size': 0.0005, 'feat_size': 1.0, 'ent': 1.0,
+        self.coeffs = {'size': 0.001, 'feat_size': 1.0, 'ent': 1.0,
                 'feat_ent':0.1, 'grad': 0, 'lap': 1.0}
 
         # ypred = self.model(x, adj)[graph_idx][node_idx]
@@ -663,6 +667,7 @@ class ExplainModule(nn.Module):
         gt_label_node = self.label if self.graph_mode else self.label[0][node_idx]
         logit = pred[gt_label_node]
         pred_loss = -torch.log(logit)
+        pred_loss = - torch.sum(pred * torch.log(pred))
         # size
         mask = self.mask
         if self.mask_act == 'sigmoid':

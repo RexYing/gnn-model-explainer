@@ -110,6 +110,7 @@ log/
 syn/
 ckpt/
 out/
+results/
 
 .idea/
 .vscode/
