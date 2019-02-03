@@ -522,6 +522,9 @@ def benchmark_task(args, writer=None, feat='node-label'):
         for G in graphs:
             for u in G.nodes():
                 G.node[u]['feat'] = np.array(G.node[u]['label'])
+                # make it -1/1 instead of 0/1
+                #feat = np.array(G.node[u]['label'])
+                #G.node[u]['feat'] = feat * 2 - 1
     else:
         print('Using constant labels')
         featgen_const = featgen.ConstFeatureGen(np.ones(args.input_dim, dtype=float))

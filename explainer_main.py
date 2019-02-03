@@ -70,6 +70,8 @@ def arg_parse():
             help='whether to run Explainer on Graph Classification task.')
     parser.add_argument('--multigraph-class', dest='multigraph_class', type=int,
             help='whether to run Explainer on multiple Graphs from the Classification task for examples in the same class.')
+    parser.add_argument('--multinode-class', dest='multinode_class', type=int,
+            help='whether to run Explainer on multiple nodes from the Classification task for examples in the same class.')
     parser.add_argument('--align-steps', dest='align_steps', type=int,
             help='Number of iterations to find P, the alignment matrix.')
 
@@ -98,7 +100,8 @@ def arg_parse():
                         explain_node=None,
                         graph_idx=-1,
                         mask_act='sigmoid',
-                        multigraph_class=-1
+                        multigraph_class=-1,
+                        multinode_class=-1
                        )
     return parser.parse_args()
 
@@ -126,7 +129,7 @@ def main():
     num_classes = cg_dict['pred'].shape[2]
     print('input dim: ', input_dim, '; num classes: ', num_classes)
 
-    graph_mode = prog_args.graph_mode or prog_args.multigraph_class >= 0
+    graph_mode = prog_args.graph_mode or prog_args.multigraph_class >= 0 or prog_args.graph_idx >= 0 
 
     # build model
     if prog_args.method == 'attn':
@@ -169,12 +172,28 @@ def main():
                 explainer.explain_graphs(graph_indices=[1,2,3,4])
             else:
                 explainer.explain(node_idx=0, graph_idx=prog_args.graph_idx, graph_mode=True, unconstrained=False)
+                io_utils.plot_cmap_tb(writer, 'tab20', 20, 'tab20_cmap')
         else:
-            # explain a set of nodes
-            # masked_adj = explainer.explain_nodes([370,390], prog_args)
-            # masked_adj = explainer.explain_nodes_gnn_cluster([370,390], prog_args)
-            masked_adj = explainer.explain_nodes_gnn_cluster(range(400, 700, 5), prog_args)
-            #pickle.dump(masked_adj, open('out/masked_adjs.pkl', 'wb'))
+            if prog_args.multinode_class >= 0:
+                print(cg_dict['label'])
+                # only run for nodes with label specified by multinode_class
+                labels = cg_dict['label'].numpy()
+
+                node_indices = []
+                for i, l in enumerate(labels):
+                    if len(node_indices) > 4:
+                        break
+                    if l == prog_args.multinode_class:
+                        node_indices.append(i)
+                print('Node indices for label ', prog_args.multinode_class, ' : ', node_indices)
+                explainer.explain_graphs(graph_indices=graph_indices)
+                
+            else:
+                # explain a set of nodes
+                # masked_adj = explainer.explain_nodes([370,390], prog_args)
+                # masked_adj = explainer.explain_nodes_gnn_cluster([370,390], prog_args)
+                masked_adj = explainer.explain_nodes_gnn_cluster(range(400, 700, 5), prog_args)
+                #pickle.dump(masked_adj, open('out/masked_adjs.pkl', 'wb'))
 
 
         

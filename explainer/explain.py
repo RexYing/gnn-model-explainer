@@ -186,7 +186,7 @@ class Explainer:
             if self.writer is not None:
                 self.writer.add_scalar('mask/density', mask_density, epoch)
                 self.writer.add_scalar('optimization/lr', explainer.optimizer.param_groups[0]['lr'], epoch)
-                if epoch % 100 == 0:
+                if epoch % 50 == 0:
                     explainer.log_mask(epoch)
                     explainer.log_masked_adj(node_idx_new, epoch, label=single_subgraph_label)
                     explainer.log_adj_grad(node_idx_new, pred_label, epoch,
@@ -381,7 +381,7 @@ class Explainer:
 
         for graph_idx in graph_indices:
           masked_adj = self.explain(node_idx=0, graph_idx=graph_idx, graph_mode=True)
-          G_denoised = io_utils.denoise_graph(masked_adj, 0, threshold=0.05, feat=self.feat[graph_idx])
+          G_denoised = io_utils.denoise_graph(masked_adj, 0, threshold=0.1, feat=self.feat[graph_idx])
           label = self.label[graph_idx]
           io_utils.log_graph(self.writer, G_denoised, 
                   'graph/graphidx_{}_label={}'.format(graph_idx, label), identify_self=False, nodecolor='feat')
@@ -392,7 +392,7 @@ class Explainer:
           io_utils.log_graph(self.writer, G_orig, 'graph/graphidx_{}'.format(graph_idx), identify_self=False, nodecolor='feat')
 
         # plot cmap for graphs' node features
-        io_utils.plot_cmap_tb(self.writer, 'tab20', 14, 'tab20_cmap')
+        io_utils.plot_cmap_tb(self.writer, 'tab20', 20, 'tab20_cmap')
 
         return masked_adjs
 
@@ -559,11 +559,14 @@ class ExplainModule(nn.Module):
         else:
             self.masked_adj = self._masked_adj()
             feat_mask = torch.sigmoid(self.feat_mask) if self.use_sigmoid else self.feat_mask
-            #std_tensor = torch.ones_like(x, dtype=torch.float) / 2
-            #mean_tensor = torch.zeros_like(x, dtype=torch.float) - x
-            #z = torch.normal(mean=mean_tensor, std=std_tensor)
-            x = x * feat_mask
-            #x = x + z * (1 - feat_mask)
+            marginalize = False
+            if marginalize:
+                std_tensor = torch.ones_like(x, dtype=torch.float) / 2
+                mean_tensor = torch.zeros_like(x, dtype=torch.float) - x
+                z = torch.normal(mean=mean_tensor, std=std_tensor)
+                x = x + z * (1 - feat_mask)
+            else:
+                x = x * feat_mask
 
         ypred = self.model(x, self.masked_adj)
         if self.graph_mode:
@@ -603,11 +606,14 @@ class ExplainModule(nn.Module):
             pred: prediction made by current model
             pred_label: the label predicted by the original model.
         '''
-        pred_label_node = pred_label if self.graph_mode else pred_label[node_idx]
-        gt_label_node = self.label if self.graph_mode else self.label[0][node_idx]
-        logit = pred[gt_label_node] 
-        pred_loss = -torch.log(logit)
-        pred_loss = - torch.sum(pred * torch.log(pred))
+        mi_obj = False
+        if mi_obj:
+            pred_loss = - torch.sum(pred * torch.log(pred))
+        else:
+            pred_label_node = pred_label if self.graph_mode else pred_label[node_idx]
+            gt_label_node = self.label if self.graph_mode else self.label[0][node_idx]
+            logit = pred[gt_label_node] 
+            pred_loss = -torch.log(logit)
         # size
         mask = self.mask
         if self.mask_act == 'sigmoid':
@@ -709,50 +715,36 @@ class ExplainModule(nn.Module):
 
 
     def log_adj_grad(self, node_idx, pred_label, epoch, label=None):
-        if self.adj.grad is not None:
-            io_utils.log_matrix(self.writer, self.adj.grad.squeeze(), 'grad/adj1', epoch)
         if self.graph_mode:
           predicted_label = pred_label
           adj_grad = torch.abs(self.adj_feat_grad(node_idx, predicted_label)[0])[0]
         else:
           predicted_label = pred_label[node_idx]
           adj_grad = torch.abs(self.adj_feat_grad(node_idx, predicted_label)[0])[self.graph_idx]
-        adj_grad = adj_grad + adj_grad.t()
+        adj_grad = (adj_grad + adj_grad.t()) / 2
         io_utils.log_matrix(self.writer, adj_grad, 'grad/adj', epoch)
+        adj_grad = (adj_grad * self.adj).squeeze()
+        io_utils.log_matrix(self.writer, adj_grad, 'grad/adj1', epoch)
         #self.adj.requires_grad = False
 
+        adj_grad = adj_grad.detach().numpy()
         if self.graph_mode:
-          G = io_utils.denoise_graph(adj_grad, node_idx)
+            G = io_utils.denoise_graph(adj_grad, node_idx, feat=self.x[0], threshold=0.0099)
+            io_utils.log_graph(self.writer, G, name='grad/graph', epoch=epoch, identify_self=False,
+                    label_node_feat=True, nodecolor='feat', edge_vmax=0.015)
         else:
-          G = io_utils.denoise_graph(adj_grad, node_idx, label=label)
-        io_utils.log_graph(self.writer, G, name='grad/graph', epoch=epoch)
+            G = io_utils.denoise_graph(adj_grad, node_idx, label=label)
+            io_utils.log_graph(self.writer, G, name='grad/graph', epoch=epoch, edge_vmax=0.7)
 
     def log_masked_adj(self, node_idx, epoch, label=None):
         # use [0] to remove the batch dim
         masked_adj = self.masked_adj[0].cpu().detach().numpy()
         if self.graph_mode:
-          G = io_utils.denoise_graph(masked_adj, node_idx)
+            G = io_utils.denoise_graph(masked_adj, node_idx, feat=self.x[0], threshold=0.2)
+            io_utils.log_graph(self.writer, G, name='mask/graph', identify_self=False,
+                    nodecolor='feat', epoch=epoch, label_node_feat=True, edge_vmax=0.9)
         else:
-          G = io_utils.denoise_graph(masked_adj, node_idx, label=label)
-        io_utils.log_graph(self.writer, G, name='mask/graph', epoch=epoch)
-        #num_nodes = self.adj.size()[-1]
-        #G = nx.Graph()
-        #G.add_nodes_from(range(num_nodes))
-        #G.node[node_idx]['color'] = 0
-        #weighted_edge_list = [(i, j, masked_adj[i, j]) for i in range(num_nodes) for j in range(num_nodes) if masked_adj[i,j] > 0.1]
-        #G.add_weighted_edges_from(weighted_edge_list)
-        #Gc = max(nx.connected_component_subgraphs(G), key=len)
-        #edge_colors = [Gc[i][j]['weight'] for (i,j) in Gc.edges()]
-        #node_colors = [Gc.node[i]['color'] if 'color' in Gc.node[i] else 1 for i in Gc.nodes()]
-
-        #plt.switch_backend('agg')
-        #fig = plt.figure(figsize=(4,3), dpi=600)
-        #nx.draw(Gc, pos=nx.spring_layout(G), with_labels=True, font_size=4,
-        #        node_color=node_colors, vmin=0, vmax=8, cmap=plt.get_cmap('Set1'),
-        #        edge_color=edge_colors, edge_cmap=plt.get_cmap('Greys'), edge_vmin=0.0, edge_vmax=1.0,
-        #        width=0.5, node_size=25,
-        #        alpha=0.7)
-        #fig.axes[0].xaxis.set_visible(False)
-        #fig.canvas.draw()
-        #self.writer.add_image('mask/graph', tensorboardX.utils.figure_to_image(fig), epoch)
+            G = io_utils.denoise_graph(masked_adj, node_idx, label=label)
+            io_utils.log_graph(self.writer, G, name='mask/graph', identify_self=True,
+                    nodecolor='label', epoch=epoch, edge_vmax=0.7)
 
