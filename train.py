@@ -297,6 +297,7 @@ def train_node_classifier(G, labels, model, args, writer=None):
     num_nodes = G.number_of_nodes()
     num_train = int(num_nodes * args.train_ratio)
     idx = [i for i in range(num_nodes)]
+
     np.random.shuffle(idx)
     train_idx = idx[:num_train]
     test_idx = idx[num_train:]
@@ -305,7 +306,7 @@ def train_node_classifier(G, labels, model, args, writer=None):
     labels_train = torch.tensor(data['labels'][:,train_idx], dtype=torch.long)
     adj = torch.tensor(data['adj'], dtype=torch.float)
     x = torch.tensor(data['feat'], requires_grad=True, dtype=torch.float)
-
+    print(labels_train.shape, adj.shape, x.shape)
     scheduler, optimizer = train_utils.build_optimizer(args, model.parameters(),
             weight_decay=args.weight_decay)
     model.train()
@@ -319,6 +320,7 @@ def train_node_classifier(G, labels, model, args, writer=None):
         else:
             ypred = model(x, adj)
         ypred_train = ypred[:,train_idx,:]
+        print(ypred_train.shape)
         if args.gpu:
             loss = model.loss(ypred_train, labels_train.cuda())
         else:
@@ -358,6 +360,89 @@ def train_node_classifier(G, labels, model, args, writer=None):
                 'label': data['labels'],
                 'pred': ypred.cpu().detach().numpy(),
                 'train_idx': train_idx}
+    io_utils.save_checkpoint(model, optimizer, args, num_epochs=-1, cg_dict=cg_data)
+
+def train_node_classifier_multigraph(G_list, labels, model, args, writer=None):
+    train_idx_all, test_idx_all = [],[]
+    all_labels = []
+    # train/test split only for nodes
+    num_nodes = G_list[0].number_of_nodes()
+    num_train = int(num_nodes * args.train_ratio)
+    idx = [i for i in range(num_nodes)]
+    np.random.shuffle(idx)
+    train_idx = idx[:num_train]; train_idx_all.append(train_idx)
+    test_idx = idx[num_train:]; test_idx_all.append(test_idx)
+
+    data = gengraph.preprocess_input_graph(G_list[0], labels[0])
+    all_labels = data['labels']
+    labels_train = torch.tensor(data['labels'][:,train_idx], dtype=torch.long)
+    adj = torch.tensor(data['adj'], dtype=torch.float)
+    x = torch.tensor(data['feat'], requires_grad=True, dtype=torch.float)
+
+    for i in range(1,len(G_list)):
+      np.random.shuffle(idx)
+      train_idx = idx[:num_train]; train_idx_all.append(train_idx)
+      test_idx = idx[num_train:]; test_idx_all.append(test_idx)
+      data = gengraph.preprocess_input_graph(G_list[i], labels[i])
+      print(all_labels.shape, data['labels'].shape)
+      all_labels = np.concatenate((all_labels, data['labels']), axis=0)
+
+      labels_train = torch.cat([labels_train, torch.tensor(data['labels'][:, train_idx], dtype=torch.long)], dim=0)
+      adj = torch.cat([adj, torch.tensor(data['adj'], dtype=torch.float)])
+      x = torch.cat([x, torch.tensor(data['feat'], requires_grad = True, dtype=torch.float)])
+
+    scheduler, optimizer = train_utils.build_optimizer(args, model.parameters(),
+            weight_decay=args.weight_decay)
+    model.train()
+    ypred = None
+    for epoch in range(args.num_epochs):
+        begin_time = time.time()
+        model.zero_grad()
+
+        if args.gpu:
+            ypred = model(x.cuda(), adj.cuda())
+        else:
+            ypred = model(x, adj)
+        ypred_train = ypred[:,train_idx,:]
+        if args.gpu:
+            loss = model.loss(ypred_train, labels_train.cuda())
+        else:
+            loss = model.loss(ypred_train, labels_train)
+        loss.backward()
+        nn.utils.clip_grad_norm(model.parameters(), args.clip)
+
+        optimizer.step()
+        for param_group in optimizer.param_groups:
+            print(param_group['lr'])
+        elapsed = time.time() - begin_time
+
+        result_train, result_test = evaluate_node(ypred.cpu(), all_labels, train_idx, test_idx)
+        if writer is not None:
+            writer.add_scalar('loss/avg_loss', loss, epoch)
+            writer.add_scalars('prec', {'train': result_train['prec'], 'test': result_test['prec']}, epoch)
+            writer.add_scalars('recall', {'train': result_train['recall'], 'test': result_test['recall']}, epoch)
+            writer.add_scalars('acc', {'train': result_train['acc'], 'test': result_test['acc']}, epoch)
+
+        print('epoch: ', epoch, '; loss: ', loss.item(),
+              '; train_acc: ', result_train['acc'], '; test_acc: ', result_test['acc'],
+              '; epoch time: ', '{0:0.2f}'.format(elapsed))
+
+        if scheduler is not None:
+            scheduler.step()
+    print(result_train['conf_mat'])
+    print(result_test['conf_mat'])
+
+    # computation graph
+    model.eval()
+    if args.gpu:
+        ypred = model(x.cuda(), adj.cuda())
+    else:
+        ypred = model(x, adj)
+    cg_data = {'adj': adj.cpu().detach().numpy(),
+                'feat': feats.cpu().detach().numpy(),
+                'label': all_labels,
+                'pred': ypred.cpu().detach().numpy(),
+                'train_idx': train_idx_all}
     io_utils.save_checkpoint(model, optimizer, args, num_epochs=-1, cg_dict=cg_data)
 
 def prepare_data(graphs, args, test_graphs=None, max_nodes=0):
@@ -509,6 +594,32 @@ def pkl_task(args, feat=None):
             args.num_gc_layers, bn=args.bn).cuda()
     train(train_dataset, model, args, test_dataset=test_dataset)
     evaluate(test_dataset, model, args, 'Validation')
+
+def enron_task(args, idx=None, writer=None):
+    labels_dict = {'None':5,'Employee': 0, 'Vice President': 1, 'Manager': 2, 'Trader':3, 'CEO+Managing Director+Director+President':4}
+    max_enron_id = 183 
+    if idx is None:
+      G_list = []; labels_list = []
+      for i in range(10):
+        net = pickle.load(open('data/gnn-explainer-enron/enron_slice_{}.pkl'.format(i), 'rb'))
+        net.add_nodes_from(range(max_enron_id))
+        labels=[n[1].get('role', 'None') for n in net.nodes(data=True)]
+        labels_num = [labels_dict[l] for l in labels]
+        featgen_const = featgen.ConstFeatureGen(np.ones(args.input_dim, dtype=float))
+        featgen_const.gen_node_features(net)
+        G_list.append(net)
+        labels_list.append(labels_num)
+      #train_dataset, test_dataset, max_num_nodes = prepare_data(G_list, args)
+      model = models.GcnEncoderNode(args.input_dim, args.hidden_dim, args.output_dim, args.num_classes,
+                                    args.num_gc_layers, bn=args.bn, args=args)
+      if args.cuda:
+        model = model.cuda()
+      print(labels_num) 
+      train_node_classifier_multigraph(G_list, labels_list, model, args, writer=writer)
+    else:
+      print("Running Enron full task")
+
+    
 
 def benchmark_task(args, writer=None, feat='node-label'):
     graphs = load_data.read_graphfile(args.datadir, args.bmname, max_nodes=args.max_nodes)
@@ -728,6 +839,8 @@ def main():
             syn_task3(prog_args, writer=writer)
         elif prog_args.dataset == 'syn4':
             syn_task4(prog_args, writer=writer)
+        elif prog_args.dataset == 'enron':
+            enron_task(prog_args, writer=writer)
 
 
     writer.close()
