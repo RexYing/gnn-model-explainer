@@ -19,6 +19,10 @@ import torch.nn as nn
 import utils.io_utils as io_utils
 import utils.train_utils as train_utils
 from sklearn.cluster import DBSCAN
+from sklearn.metrics import roc_auc_score
+import pdb
+from sklearn.metrics import recall_score
+from sklearn.metrics import precision_score
 
 
 # import models_gcn.GCN as GCN
@@ -272,6 +276,62 @@ class Explainer:
         #        'align/aligned', epoch=1)
 
         return masked_adjs
+
+
+    def make_pred_real(self,G,start,type='house'):
+        if type=='house':
+            num_pred = max(G.number_of_edges(),6)
+            real = np.ones(num_pred)
+            pred = np.zeros(num_pred)
+            if G.has_edge(start, start+1):
+                pred[0] = 1
+            if G.has_edge(start+1, start+2):
+                pred[1] = 1
+            if G.has_edge(start+2, start+3):
+                pred[2] = 1
+            if G.has_edge(start+3, start):
+                pred[3] = 1
+            if G.has_edge(start+4, start):
+                pred[4] = 1
+            if G.has_edge(start+4, start+1):
+                pred[5] = 1
+
+            precision = precision_score(real,pred)
+            recall = recall_score(real,pred)
+
+        return precision,recall
+
+
+    def explain_nodes_gnn_stats(self, node_indices, args, graph_idx=0):
+        masked_adjs = [self.explain(node_idx, graph_idx=graph_idx) for node_idx in node_indices]
+
+        graphs = []
+        feats = []
+        adjs = []
+        precision_all = 0
+        recall_all = 0
+        for i,idx in enumerate(node_indices):
+            new_idx, _, feat, _, _ = self.extract_neighborhood(idx)
+            G = io_utils.denoise_graph(masked_adjs[i], new_idx, feat, threshold=0.1)
+            precision, recall = self.make_pred_real(G,new_idx)
+            precision_all += precision
+            recall_all += recall
+            # pdb.set_trace()
+            denoised_feat = np.array([G.node[node]['feat'] for node in G.nodes()])
+            denoised_adj = nx.to_numpy_matrix(G)
+            graphs.append(G)
+            feats.append(denoised_feat)
+            adjs.append(denoised_adj)
+        precision_all /= len(node_indices)
+        recall_all /= len(node_indices)
+
+        with open('log/pr/pr'+str(time.time())+'.txt', 'w') as f:
+            f.write('dataset: {}, model: {}, precision: {}, recall: {}\n'.format(self.args.dataset, 'lexp', str(precision_all), str(recall_all)))
+
+
+
+        return masked_adjs
+
 
     def explain_nodes_gnn_cluster(self, node_indices, args, graph_idx=0):
         masked_adjs = [self.explain(node_idx, graph_idx=graph_idx) for node_idx in node_indices]
