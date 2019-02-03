@@ -273,14 +273,18 @@ class Explainer:
 
         for graph_idx in graph_indices:
           masked_adj = self.explain(node_idx=0, graph_idx=graph_idx, graph_mode=True)
-          G_denoised = io_utils.denoise_graph(masked_adj, 0, threshold=0.5)
+          G_denoised = io_utils.denoise_graph(masked_adj, 0, threshold=0.05, feat=self.feat[graph_idx])
           label = self.label[graph_idx]
-          io_utils.log_graph(self.writer, G_denoised, 'graph/graphidx_{}_label={}'.format(graph_idx, label))
+          io_utils.log_graph(self.writer, G_denoised, 
+                  'graph/graphidx_{}_label={}'.format(graph_idx, label), identify_self=False, nodecolor='feat')
           masked_adjs.append(masked_adj)
           
-          G_orig = io_utils.denoise_graph(self.adj[graph_idx], 0, threshold=0) 
+          G_orig = io_utils.denoise_graph(self.adj[graph_idx], 0, feat=self.feat[graph_idx], threshold=0) 
           #G_orig = nx.from_numpy_matrix(self.adj[graph_idx].cpu().detach().numpy())
-          io_utils.log_graph(self.writer, G_orig, 'graph/graphidx_{}'.format(graph_idx))
+          io_utils.log_graph(self.writer, G_orig, 'graph/graphidx_{}'.format(graph_idx), identify_self=False, nodecolor='feat')
+
+        # plot cmap for graphs' node features
+        io_utils.plot_cmap_tb(self.writer, 'tab20', 14, 'tab20_cmap')
 
         return masked_adjs
 

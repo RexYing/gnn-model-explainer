@@ -68,9 +68,8 @@ def arg_parse():
     parser.add_argument('--graph-mode', dest='graph_mode', action='store_const',
             const=True, default=False,
             help='whether to run Explainer on Graph Classification task.')
-    parser.add_argument('--multigraph-mode', dest='multigraph_mode', action='store_const',
-            const=True, default=False,
-            help='whether to run Explainer on multiple Graphs from the Classification task.')
+    parser.add_argument('--multigraph-class', dest='multigraph_class', type=int,
+            help='whether to run Explainer on multiple Graphs from the Classification task for examples in the same class.')
     parser.add_argument('--align-steps', dest='align_steps', type=int,
             help='Number of iterations to find P, the alignment matrix.')
 
@@ -97,8 +96,9 @@ def arg_parse():
                         name_suffix='',
                         align_steps=1000,
                         explain_node=None,
-                        graph_idx=0,
-                        mask_act='sigmoid'
+                        graph_idx=-1,
+                        mask_act='sigmoid',
+                        multigraph_class=-1
                        )
     return parser.parse_args()
 
@@ -126,7 +126,7 @@ def main():
     num_classes = cg_dict['pred'].shape[2]
     print('input dim: ', input_dim, '; num classes: ', num_classes)
 
-    graph_mode = prog_args.graph_mode or prog_args.multigraph_mode
+    graph_mode = prog_args.graph_mode or prog_args.multigraph_class >= 0
 
     # build model
     if prog_args.method == 'attn':
@@ -151,10 +151,24 @@ def main():
         if prog_args.explain_node is not None:
             explainer.explain(prog_args.explain_node, unconstrained=False)
         elif graph_mode:
-            if prog_args.multigraph_mode:
-              explainer.explain_graphs(graph_indices=[1,2,3,4])
+            if prog_args.multigraph_class >= 0:
+                print(cg_dict['label'])
+                # only run for graphs with label specified by multigraph_class
+                labels = cg_dict['label'].numpy()
+                graph_indices = []
+                for i, l in enumerate(labels):
+                    if l == prog_args.multigraph_class:
+                        graph_indices.append(i)
+                    if len(graph_indices) > 3:
+                        break
+                print('Graph indices for label ', prog_args.multigraph_class, ' : ', graph_indices)
+                explainer.explain_graphs(graph_indices=graph_indices)
+                    
+            elif prog_args.graph_idx == -1:
+                # just run for a customized set of indices
+                explainer.explain_graphs(graph_indices=[1,2,3,4])
             else:
-              explainer.explain(node_idx=0, graph_idx=prog_args.graph_idx, graph_mode=True, unconstrained=False)
+                explainer.explain(node_idx=0, graph_idx=prog_args.graph_idx, graph_mode=True, unconstrained=False)
         else:
             # explain a set of nodes
             masked_adj = explainer.explain_nodes([370,390], prog_args)
