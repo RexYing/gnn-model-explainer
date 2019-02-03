@@ -177,7 +177,7 @@ def main():
             if prog_args.multinode_class >= 0:
                 print(cg_dict['label'])
                 # only run for nodes with label specified by multinode_class
-                labels = cg_dict['label'].numpy()
+                labels = cg_dict['label'][0]  # already numpy matrix
 
                 node_indices = []
                 for i, l in enumerate(labels):
@@ -186,7 +186,7 @@ def main():
                     if l == prog_args.multinode_class:
                         node_indices.append(i)
                 print('Node indices for label ', prog_args.multinode_class, ' : ', node_indices)
-                explainer.explain_graphs(graph_indices=graph_indices)
+                explainer.explain_nodes(node_indices, prog_args)
                 
             else:
                 # explain a set of nodes

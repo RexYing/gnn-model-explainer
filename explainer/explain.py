@@ -733,7 +733,7 @@ class ExplainModule(nn.Module):
             io_utils.log_graph(self.writer, G, name='grad/graph', epoch=epoch, identify_self=False,
                     label_node_feat=True, nodecolor='feat', edge_vmax=0.015)
         else:
-            G = io_utils.denoise_graph(adj_grad, node_idx, label=label)
+            G = io_utils.denoise_graph(adj_grad, node_idx, label=label, threshold=0.002)
             io_utils.log_graph(self.writer, G, name='grad/graph', epoch=epoch, edge_vmax=0.7)
 
     def log_masked_adj(self, node_idx, epoch, label=None):
