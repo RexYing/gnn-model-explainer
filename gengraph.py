@@ -171,7 +171,9 @@ def preprocess_input_graph(G, labels, normalize_adj=False):
         sqrt_deg = np.diag(1.0 / np.sqrt(np.sum(adj, axis=0, dtype=float).squeeze()))
         adj = np.matmul(np.matmul(sqrt_deg, adj), sqrt_deg)
 
-    feat_dim = G.node[0]['feat'].shape[0]
+
+    existing_node = list(G.nodes)[-1]
+    feat_dim = G.node[existing_node]['feat'].shape[0]
     f = np.zeros((G.number_of_nodes(), feat_dim), dtype=float)
     for i, u in enumerate(G.nodes()):
         f[i, :] = G.node[u]['feat']
