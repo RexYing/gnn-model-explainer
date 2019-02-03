@@ -418,3 +418,5 @@ class SoftPoolingGcnEncoder(GcnEncoderGraph):
             return loss + self.link_loss
         return loss
 
+
+

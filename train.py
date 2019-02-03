@@ -699,9 +699,9 @@ def main():
 
     # export scalar data to JSON for external processing
     path = os.path.join(prog_args.logdir, io_utils.gen_prefix(prog_args))
-    if os.path.isdir(path):
-        print('Remove existing log dir: ', path)
-        shutil.rmtree(path)
+    # if os.path.isdir(path):
+    #     print('Remove existing log dir: ', path)
+    #     shutil.rmtree(path)
     writer = SummaryWriter(path)
     #writer = None
 

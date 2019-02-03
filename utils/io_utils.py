@@ -136,7 +136,7 @@ def log_graph(writer, Gc, name, identify_self=True, nodecolor='label', epoch=0, 
             alpha=0.7)
     fig.axes[0].xaxis.set_visible(False)
     fig.canvas.draw()
-    plt.savefig('log/' + name)
+    plt.savefig('log/' + name+'.png')
     img = tensorboardX.utils.figure_to_image(fig)
     writer.add_image(name, img, epoch)
 

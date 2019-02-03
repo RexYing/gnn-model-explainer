@@ -171,7 +171,9 @@ def main():
                 explainer.explain(node_idx=0, graph_idx=prog_args.graph_idx, graph_mode=True, unconstrained=False)
         else:
             # explain a set of nodes
-            masked_adj = explainer.explain_nodes([370,390], prog_args)
+            # masked_adj = explainer.explain_nodes([370,390], prog_args)
+            # masked_adj = explainer.explain_nodes_gnn_cluster([370,390], prog_args)
+            masked_adj = explainer.explain_nodes_gnn_cluster(range(400, 700, 5), prog_args)
             #pickle.dump(masked_adj, open('out/masked_adjs.pkl', 'wb'))
 
 

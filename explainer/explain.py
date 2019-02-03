@@ -18,6 +18,11 @@ import torch.nn as nn
 
 import utils.io_utils as io_utils
 import utils.train_utils as train_utils
+from sklearn.cluster import DBSCAN
+
+
+# import models_gcn.GCN as GCN
+from models_gcn import GCN
 
 use_cuda = torch.cuda.is_available()
 FloatTensor = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
@@ -263,6 +268,109 @@ class Explainer:
         G_aligned = io_utils.denoise_graph(aligned_adj, aligned_idx, aligned_feat, threshold=0.5)
         io_utils.log_graph(self.writer, G_aligned, 'mask/aligned')
         
+        #io_utils.log_graph(self.writer, aligned_adj.cpu().detach().numpy(), new_curr_idx,
+        #        'align/aligned', epoch=1)
+
+        return masked_adjs
+
+    def explain_nodes_gnn_cluster(self, node_indices, args, graph_idx=0):
+        masked_adjs = [self.explain(node_idx, graph_idx=graph_idx) for node_idx in node_indices]
+
+        # ref_idx = node_indices[0]
+        # ref_adj = masked_adjs[0]
+
+        graphs = []
+        feats = []
+        adjs = []
+        for i,idx in enumerate(node_indices):
+            new_idx, _, feat, _, _ = self.extract_neighborhood(idx)
+            G = io_utils.denoise_graph(masked_adjs[i], new_idx, feat, threshold=0.1)
+            denoised_feat = np.array([G.node[node]['feat'] for node in G.nodes()])
+            denoised_adj = nx.to_numpy_matrix(G)
+            graphs.append(G)
+            feats.append(denoised_feat)
+            adjs.append(denoised_adj)
+
+        model = GCN(input_dim=feats[0].shape[1],
+                    hidden_dim=64, output_dim=64, num_layers=2,
+                    normalize_embedding_l2=True).cuda()
+        # model = self.model
+        pred_all = []
+
+        for i in range(len(graphs)):
+            adj = Variable(torch.from_numpy(adjs[i]).float(), requires_grad=False).cuda()
+            feature = Variable(torch.from_numpy(feats[i]).float(), requires_grad=False).cuda()
+            # import pdb
+            # pdb.set_trace()
+            pred = model(feature, adj)
+            pred_all.append(pred.data.cpu().numpy())
+
+        X = np.concatenate(pred_all, axis=0)
+
+        import pdb
+        # pdb.set_trace()
+        import matplotlib.pyplot as plt
+        from sklearn.manifold import TSNE
+
+        plt.switch_backend('agg')
+        # X = TSNE(n_components=2, n_iter=1000).fit_transform(X)
+        # plt.scatter(X[:, 0], X[:, 1])
+
+        # db = DBSCAN(eps=0.2, min_samples=3).fit(X)
+        db = DBSCAN(eps=0.2, min_samples=len(graphs)//4).fit(X)
+        core_samples_mask = np.zeros_like(db.labels_, dtype=bool)
+        core_samples_mask[db.core_sample_indices_] = True
+        labels = db.labels_
+        n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
+        n_noise_ = list(labels).count(-1)
+
+
+        count_dict = np.bincount(db.labels_[db.labels_>=0])
+        graphs_denoised = []
+        counter = 0
+        for i in range(len(graphs)):
+            graph = graphs[i]
+            nodes = []
+            for node in graph.nodes():
+                label = db.labels_[counter]
+                if label>=0 and count_dict[label] < len(graphs)*2:
+                    nodes.append(node)
+                counter += 1
+            graphs_denoised.append(graph.subgraph(nodes))
+
+
+        for i,graph in enumerate(graphs):
+            io_utils.log_graph(self.writer, graph, 'align/before'+str(i))
+        for i,graph in enumerate(graphs_denoised):
+            io_utils.log_graph(self.writer, graph, 'align/after'+str(i))
+
+        #
+        #
+        # # Black removed and is used for noise instead.
+        # unique_labels = set(labels)
+        # colors = [plt.cm.Spectral(each)
+        #           for each in np.linspace(0, 1, len(unique_labels))]
+        # for k, col in zip(unique_labels, colors):
+        #     if k == -1:
+        #         # Black used for noise.
+        #         col = [0, 0, 0, 1]
+        #
+        #     class_member_mask = (labels == k)
+        #
+        #     xy = X[class_member_mask & core_samples_mask]
+        #     plt.plot(xy[:, 0], xy[:, 1], 'o', markerfacecolor=tuple(col),
+        #              markeredgecolor='k', markersize=14)
+        #
+        #     xy = X[class_member_mask & ~core_samples_mask]
+        #     plt.plot(xy[:, 0], xy[:, 1], 'o', markerfacecolor=tuple(col),
+        #              markeredgecolor='k', markersize=6)
+        #
+        # plt.title('Estimated number of clusters: %d' % n_clusters_)
+        #
+        # plt.savefig('log/fig/test.png')
+
+        # io_utils.log_graph(self.writer, graphs[0], 'align/ref')
+        # io_utils.log_graph(self.writer, graphs[1], 'align/before')
         #io_utils.log_graph(self.writer, aligned_adj.cpu().detach().numpy(), new_curr_idx,
         #        'align/aligned', epoch=1)
 
