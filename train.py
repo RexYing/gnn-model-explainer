@@ -364,7 +364,6 @@ def train_node_classifier(G, labels, model, args, writer=None):
 
 def train_node_classifier_multigraph(G_list, labels, model, args, writer=None):
     train_idx_all, test_idx_all = [],[]
-    all_labels = []
     # train/test split only for nodes
     num_nodes = G_list[0].number_of_nodes()
     num_train = int(num_nodes * args.train_ratio)
@@ -384,7 +383,6 @@ def train_node_classifier_multigraph(G_list, labels, model, args, writer=None):
       train_idx = idx[:num_train]; train_idx_all.append(train_idx)
       test_idx = idx[num_train:]; test_idx_all.append(test_idx)
       data = gengraph.preprocess_input_graph(G_list[i], labels[i])
-      print(all_labels.shape, data['labels'].shape)
       all_labels = np.concatenate((all_labels, data['labels']), axis=0)
 
       labels_train = torch.cat([labels_train, torch.tensor(data['labels'][:, train_idx], dtype=torch.long)], dim=0)
@@ -439,7 +437,7 @@ def train_node_classifier_multigraph(G_list, labels, model, args, writer=None):
     else:
         ypred = model(x, adj)
     cg_data = {'adj': adj.cpu().detach().numpy(),
-                'feat': feats.cpu().detach().numpy(),
+                'feat': x.cpu().detach().numpy(),
                 'label': all_labels,
                 'pred': ypred.cpu().detach().numpy(),
                 'train_idx': train_idx_all}
