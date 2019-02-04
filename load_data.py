@@ -24,12 +24,19 @@ def read_graphfile(datadir, dataname, max_nodes=None):
 
     filename_nodes=prefix + '_node_labels.txt'
     node_labels=[]
+    min_label_val = None
     try:
         with open(filename_nodes) as f:
+            has_zero = False
             for line in f:
                 line=line.strip("\n")
-                node_labels+=[int(line) - 1]
-        num_unique_node_labels = max(node_labels) + 1
+                l = int(line)
+                node_labels+=[l]
+                if min_label_val is None or min_label_val > l:
+                    min_label_val = l
+        # assume that node labels are consecutive
+        num_unique_node_labels = max(node_labels) - min_label_val + 1
+        node_labels = [l - min_label_val for l in node_labels]
     except IOError:
         print('No node labels')
  
@@ -59,7 +66,6 @@ def read_graphfile(datadir, dataname, max_nodes=None):
 
     label_map_to_int = {val:i for i, val in enumerate(label_vals)}
     graph_labels = np.array([label_map_to_int[l] for l in graph_labels])
-    print(graph_labels)
     
     filename_adj=prefix + '_A.txt'
     adj_list={i:[] for i in range(1,len(graph_labels)+1)}    

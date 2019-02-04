@@ -111,6 +111,7 @@ syn/
 ckpt/
 out/
 results/
+path/
 
 .idea/
 .vscode/

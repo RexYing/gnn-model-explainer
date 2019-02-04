@@ -485,6 +485,26 @@ def syn_task4(args, writer=None):
 
     train_node_classifier(G, labels, model, args, writer=writer)
 
+def syn_task5(args, writer=None):
+    # data
+    G, labels, name = gengraph.gen_syn5(
+            feature_generator=featgen.ConstFeatureGen(np.ones(args.input_dim, dtype=float)))
+    print(labels)
+    print('Number of nodes: ', G.number_of_nodes())
+    num_classes = max(labels)+1
+
+    if args.method == 'attn':
+        print('Method: attn')
+    else:
+        print('Method: base')
+        model = models.GcnEncoderNode(args.input_dim, args.hidden_dim, args.output_dim, num_classes,
+                                       args.num_gc_layers, bn=args.bn, args=args)
+
+        if args.gpu:
+            model = model.cuda()
+
+    train_node_classifier(G, labels, model, args, writer=writer)
+
 def pkl_task(args, feat=None):
     with open(os.path.join(args.datadir, args.pkl_fname), 'rb') as pkl_file:
         data = pickle.load(pkl_file)
@@ -524,6 +544,9 @@ def benchmark_task(args, writer=None, feat='node-label'):
         for G in graphs:
             for u in G.nodes():
                 G.node[u]['feat'] = np.array(G.node[u]['label'])
+                # make it -1/1 instead of 0/1
+                #feat = np.array(G.node[u]['label'])
+                #G.node[u]['feat'] = feat * 2 - 1
     else:
         print('Using constant labels')
         featgen_const = featgen.ConstFeatureGen(np.ones(args.input_dim, dtype=float))
@@ -727,6 +750,8 @@ def main():
             syn_task3(prog_args, writer=writer)
         elif prog_args.dataset == 'syn4':
             syn_task4(prog_args, writer=writer)
+        elif prog_args.dataset == 'syn5':
+            syn_task5(prog_args, writer=writer)
 
 
     writer.close()
