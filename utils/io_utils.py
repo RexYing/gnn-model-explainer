@@ -63,7 +63,10 @@ def load_ckpt(args, isbest=False):
 def log_matrix(writer, mat, name, epoch, fig_size=(8,6), dpi=200):
     plt.switch_backend('agg')
     fig = plt.figure(figsize=fig_size, dpi=dpi)
-    plt.imshow(mat.cpu().detach().numpy(), cmap=plt.get_cmap('BuPu'))
+    mat = mat.cpu().detach().numpy()
+    if mat.ndim == 1:
+        mat = mat[:, np.newaxis]
+    plt.imshow(mat, cmap=plt.get_cmap('BuPu'))
     cbar = plt.colorbar()
     cbar.solids.set_edgecolor("face")
 

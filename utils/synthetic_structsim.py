@@ -42,6 +42,7 @@ def clique(start, nb_nodes, nb_to_remove=0, role_start=0):
     return graph, roles
 
 
+
 def cycle(start, len_cycle, role_start=0):
     '''Builds a cycle graph, with index of nodes starting at start
     and role_ids at role_start
@@ -174,6 +175,12 @@ def house(start, role_start=0):
              role_start + 1, role_start + 2]
     return graph, roles
 
+def grid(start, dim=2, role_start=0):
+    ''' Builds a 2by2 grid)
+    '''
+    grid_G = nx.grid_graph(dim)
+    roles = [1 for i in grid_G.nodes()]
+    return graph, roles
 
 def star(start, nb_branches, role_start=0):
     '''Builds a star graph, with index of nodes starting at start

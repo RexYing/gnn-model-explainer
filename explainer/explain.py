@@ -743,14 +743,16 @@ class ExplainModule(nn.Module):
         fig.canvas.draw()
         self.writer.add_image('mask/mask', tensorboardX.utils.figure_to_image(fig), epoch)
 
-        fig = plt.figure(figsize=(4,3), dpi=400)
-        plt.imshow(self.feat_mask.cpu().detach().numpy()[:,np.newaxis], cmap=plt.get_cmap('BuPu'))
-        cbar = plt.colorbar()
-        cbar.solids.set_edgecolor("face")
+        #fig = plt.figure(figsize=(4,3), dpi=400)
+        #plt.imshow(self.feat_mask.cpu().detach().numpy()[:,np.newaxis], cmap=plt.get_cmap('BuPu'))
+        #cbar = plt.colorbar()
+        #cbar.solids.set_edgecolor("face")
 
-        plt.tight_layout()
-        fig.canvas.draw()
-        self.writer.add_image('mask/feat_mask', tensorboardX.utils.figure_to_image(fig), epoch)
+        #plt.tight_layout()
+        #fig.canvas.draw()
+        #self.writer.add_image('mask/feat_mask', tensorboardX.utils.figure_to_image(fig), epoch)
+        io_utils.log_matrix(self.writer, torch.sigmoid(self.feat_mask), 'mask/feat_mask', epoch)
+        #print(self.feat_mask,  'FEAT MASK ----------------')
 
         fig = plt.figure(figsize=(4,3), dpi=400)
         # use [0] to remove the batch dim
@@ -777,24 +779,35 @@ class ExplainModule(nn.Module):
     def log_adj_grad(self, node_idx, pred_label, epoch, label=None):
         if self.graph_mode:
           predicted_label = pred_label
-          adj_grad = torch.abs(self.adj_feat_grad(node_idx, predicted_label)[0])[0]
+          #adj_grad, x_grad = torch.abs(self.adj_feat_grad(node_idx, predicted_label)[0])[0]
+          adj_grad, x_grad = self.adj_feat_grad(node_idx, predicted_label)
+          adj_grad = torch.abs(adj_grad)[0]
+          x_grad = torch.sum(x_grad[0], 0, keepdim=True).t()
+          print(x_grad)
         else:
           predicted_label = pred_label[node_idx]
-          adj_grad = torch.abs(self.adj_feat_grad(node_idx, predicted_label)[0])[self.graph_idx]
+          #adj_grad = torch.abs(self.adj_feat_grad(node_idx, predicted_label)[0])[self.graph_idx]
+          adj_grad, x_grad = self.adj_feat_grad(node_idx, predicted_label)
+          adj_grad = torch.abs(adj_grad)[self.graph_idx]
+          x_grad = x_grad[self.graph_idx][node_idx][:, np.newaxis]
+          #x_grad = torch.sum(x_grad[self.graph_idx], 0, keepdim=True).t()
         adj_grad = (adj_grad + adj_grad.t()) / 2
         io_utils.log_matrix(self.writer, adj_grad, 'grad/adj', epoch)
         adj_grad = (adj_grad * self.adj).squeeze()
         io_utils.log_matrix(self.writer, adj_grad, 'grad/adj1', epoch)
         #self.adj.requires_grad = False
+        io_utils.log_matrix(self.writer, self.adj.squeeze(), 'grad/adj_orig', epoch)
+        io_utils.log_matrix(self.writer, x_grad, 'grad/feat', epoch)
+        #print(x_grad,  'X GRAD ----------------')
 
         adj_grad = adj_grad.detach().numpy()
         if self.graph_mode:
             G = io_utils.denoise_graph(adj_grad, node_idx, feat=self.x[0], threshold=0.0099)
             io_utils.log_graph(self.writer, G, name='grad/graph', epoch=epoch, identify_self=False,
-                    label_node_feat=True, nodecolor='feat', edge_vmax=0.015)
+                    label_node_feat=True, nodecolor='feat', edge_vmax=0.05)
         else:
-            G = io_utils.denoise_graph(adj_grad, node_idx, label=label, threshold=0.002)
-            io_utils.log_graph(self.writer, G, name='grad/graph', epoch=epoch, edge_vmax=0.7)
+            G = io_utils.denoise_graph(adj_grad, node_idx, label=label, threshold=0.001)
+            io_utils.log_graph(self.writer, G, name='grad/graph', epoch=epoch, edge_vmax=0.012)
 
     def log_masked_adj(self, node_idx, epoch, label=None):
         # use [0] to remove the batch dim
