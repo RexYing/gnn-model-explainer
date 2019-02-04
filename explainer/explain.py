@@ -803,22 +803,26 @@ class ExplainModule(nn.Module):
 
         adj_grad = adj_grad.detach().numpy()
         if self.graph_mode:
-            G = io_utils.denoise_graph(adj_grad, node_idx, feat=self.x[0], threshold=0.0099)
+            print('GRAPH model')
+            G = io_utils.denoise_graph(adj_grad, node_idx, feat=self.x[0], threshold=0.035)
             io_utils.log_graph(self.writer, G, name='grad/graph', epoch=epoch, identify_self=False,
-                    label_node_feat=True, nodecolor='feat', edge_vmax=0.05)
+                    label_node_feat=True, nodecolor='feat', edge_vmax=0.06, args=self.args)
         else:
-            G = io_utils.denoise_graph(adj_grad, node_idx, label=label, threshold=0.001)
-            io_utils.log_graph(self.writer, G, name='grad/graph', epoch=epoch, edge_vmax=0.012)
+            #G = io_utils.denoise_graph(adj_grad, node_idx, label=label, threshold=0.5)
+            G = io_utils.denoise_graph(adj_grad, node_idx, threshold=0.001)
+            io_utils.log_graph(self.writer, G, name='grad/graph', epoch=epoch, edge_vmax=0.008,
+                    args=self.args)
 
     def log_masked_adj(self, node_idx, epoch, label=None):
         # use [0] to remove the batch dim
         masked_adj = self.masked_adj[0].cpu().detach().numpy()
         if self.graph_mode:
-            G = io_utils.denoise_graph(masked_adj, node_idx, feat=self.x[0], threshold=0.2)
+            G = io_utils.denoise_graph(masked_adj, node_idx, feat=self.x[0], threshold=0.4)
             io_utils.log_graph(self.writer, G, name='mask/graph', identify_self=False,
-                    nodecolor='feat', epoch=epoch, label_node_feat=True, edge_vmax=0.9)
+                    nodecolor='feat', epoch=epoch, label_node_feat=True, edge_vmax=0.9, args=self.args)
         else:
-            G = io_utils.denoise_graph(masked_adj, node_idx, label=label)
+            #G = io_utils.denoise_graph(masked_adj, node_idx, label=label)
+            G = io_utils.denoise_graph(masked_adj, node_idx)
             io_utils.log_graph(self.writer, G, name='mask/graph', identify_self=True,
-                    nodecolor='label', epoch=epoch, edge_vmax=0.7)
+                    nodecolor='label', epoch=epoch, edge_vmax=0.7, args=self.args)
 

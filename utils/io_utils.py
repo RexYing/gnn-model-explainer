@@ -93,7 +93,7 @@ def denoise_graph(adj, node_idx, feat=None, label=None, threshold=0.1):
     return Gc
 
 def log_graph(writer, Gc, name, identify_self=True, nodecolor='label', epoch=0, fig_size=(4,3),
-        dpi=300, label_node_feat=False, edge_vmax=1.0):
+        dpi=300, label_node_feat=False, edge_vmax=1.0, args=None):
     '''
     Args:
         nodecolor: the color of node, can be determined by 'label', or 'feat'. For feat, it needs to
@@ -156,7 +156,13 @@ def log_graph(writer, Gc, name, identify_self=True, nodecolor='label', epoch=0, 
             alpha=0.8)
     fig.axes[0].xaxis.set_visible(False)
     fig.canvas.draw()
-    plt.savefig('log/' + name+'.png')
+    #plt.savefig('log/' + name+'.png')
+    if args is None:
+        plt.savefig('log/' + name+'.pdf', format='pdf')
+    else:
+        plt.savefig('log/' + name + gen_explainer_prefix(args) + '_' + str(epoch) + '.pdf', format='pdf')
+        print('log/' + name + gen_explainer_prefix(args) + '_' + str(epoch) + '.pdf')
+
     img = tensorboardX.utils.figure_to_image(fig)
     writer.add_image(name, img, epoch)
 
