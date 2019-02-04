@@ -75,8 +75,8 @@ def arg_parse():
     parser.add_argument('--align-steps', dest='align_steps', type=int,
             help='Number of iterations to find P, the alignment matrix.')
 
-    parser.add_argument('--method', dest='method',
-            help='Method. Possible values: base, ')
+    parser.add_argument('--method', dest='method', type=str,
+            help='Method. Possible values: base, att')
     parser.add_argument('--name-suffix', dest='name_suffix',
             help='suffix added to the output filename')
 
@@ -129,7 +129,7 @@ def main():
     num_classes = cg_dict['pred'].shape[2]
     print('input dim: ', input_dim, '; num classes: ', num_classes)
 
-    graph_mode = prog_args.graph_mode or prog_args.multigraph_class >= 0 or prog_args.graph_idx >= 0 
+    graph_mode = prog_args.graph_mode or prog_args.multigraph_class >= 0 or prog_args.graph_idx >= 0
 
     # build model
     if prog_args.method == 'attn':
@@ -187,7 +187,7 @@ def main():
                         node_indices.append(i)
                 print('Node indices for label ', prog_args.multinode_class, ' : ', node_indices)
                 explainer.explain_nodes(node_indices, prog_args)
-                
+
             else:
                 # explain a set of nodes
                 # masked_adj = explainer.explain_nodes([370,390], prog_args)
@@ -195,6 +195,12 @@ def main():
                 # masked_adj = explainer.explain_nodes_gnn_cluster(range(400, 700, 5), prog_args)
                 masked_adj = explainer.explain_nodes_gnn_stats(range(400, 700, 5), prog_args)
                 #pickle.dump(masked_adj, open('out/masked_adjs.pkl', 'wb'))
+            # explain a set of nodes
+            # masked_adj = explainer.explain_nodes([370,390], prog_args)
+            # masked_adj = explainer.explain_nodes_gnn_cluster([370,390], prog_args)
+            # masked_adj = explainer.explain_nodes_gnn_cluster(range(400, 700, 5), prog_args)
+            # masked_adj = explainer.explain_nodes_gnn_stats(range(511, 811, 6), prog_args)
+            #pickle.dump(masked_adj, open('out/masked_adjs.pkl', 'wb'))
 
 
         

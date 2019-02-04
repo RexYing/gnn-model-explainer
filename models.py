@@ -5,12 +5,58 @@ import torch.nn.functional as F
 
 import numpy as np
 
+#
+# # GCN basic operation
+# class GraphConv(nn.Module):
+#     def __init__(self, input_dim, output_dim, add_self=False, normalize_embedding=False,
+#             dropout=0.0, bias=True, gpu=True):
+#         super(GraphConv, self).__init__()
+#         self.add_self = add_self
+#         self.dropout = dropout
+#         if dropout > 0.001:
+#             self.dropout_layer = nn.Dropout(p=dropout)
+#         self.normalize_embedding = normalize_embedding
+#         self.input_dim = input_dim
+#         self.output_dim = output_dim
+#         if not gpu:
+#             self.weight = nn.Parameter(torch.FloatTensor(input_dim, output_dim))
+#             if add_self:
+#                 self.self_weight = nn.Parameter(torch.FloatTensor(input_dim, output_dim))
+#         else:
+#             self.weight = nn.Parameter(torch.FloatTensor(input_dim, output_dim).cuda())
+#             if add_self:
+#                 self.self_weight = nn.Parameter(torch.FloatTensor(input_dim, output_dim).cuda())
+#         if bias:
+#             if not gpu:
+#                 self.bias = nn.Parameter(torch.FloatTensor(output_dim))
+#             else:
+#                 self.bias = nn.Parameter(torch.FloatTensor(output_dim).cuda())
+#         else:
+#             self.bias = None
+#
+#     def forward(self, x, adj):
+#         if self.dropout > 0.001:
+#             x = self.dropout_layer(x)
+#         #deg = torch.sum(adj, -1, keepdim=True)
+#         y = torch.matmul(adj, x)
+#         y = torch.matmul(y, self.weight)
+#         if self.add_self:
+#             self_emb = torch.matmul(x, self.self_weight)
+#             y += self_emb
+#         if self.bias is not None:
+#             y = y + self.bias
+#         if self.normalize_embedding:
+#             y = F.normalize(y, p=2, dim=2)
+#             #print(y[0][0])
+#         return y
+
 
 # GCN basic operation
 class GraphConv(nn.Module):
     def __init__(self, input_dim, output_dim, add_self=False, normalize_embedding=False,
-            dropout=0.0, bias=True, gpu=True):
+            dropout=0.0, bias=True, gpu=True, att=False):
         super(GraphConv, self).__init__()
+        self.att = att
         self.add_self = add_self
         self.dropout = dropout
         if dropout > 0.001:
@@ -22,10 +68,14 @@ class GraphConv(nn.Module):
             self.weight = nn.Parameter(torch.FloatTensor(input_dim, output_dim))
             if add_self:
                 self.self_weight = nn.Parameter(torch.FloatTensor(input_dim, output_dim))
+            if att:
+                self.att_weight = nn.Parameter(torch.FloatTensor(input_dim, input_dim))
         else:
             self.weight = nn.Parameter(torch.FloatTensor(input_dim, output_dim).cuda())
             if add_self:
                 self.self_weight = nn.Parameter(torch.FloatTensor(input_dim, output_dim).cuda())
+            if att:
+                self.att_weight = nn.Parameter(torch.FloatTensor(input_dim, input_dim).cuda())
         if bias:
             if not gpu:
                 self.bias = nn.Parameter(torch.FloatTensor(output_dim))
@@ -34,10 +84,21 @@ class GraphConv(nn.Module):
         else:
             self.bias = None
 
+        # self.softmax = nn.Softmax(dim=-1)
+
+
     def forward(self, x, adj):
         if self.dropout > 0.001:
             x = self.dropout_layer(x)
         #deg = torch.sum(adj, -1, keepdim=True)
+        if self.att:
+            x_att = torch.matmul(x, self.att_weight)
+            # import pdb
+            # pdb.set_trace()
+            att = x_att @ x_att.permute(0, 2, 1)
+            # att = self.softmax(att)
+            adj = adj*att
+
         y = torch.matmul(adj, x)
         y = torch.matmul(y, self.weight)
         if self.add_self:
@@ -48,8 +109,7 @@ class GraphConv(nn.Module):
         if self.normalize_embedding:
             y = F.normalize(y, p=2, dim=2)
             #print(y[0][0])
-        return y
-
+        return y, adj
 
 class GcnEncoderGraph(nn.Module):
     def __init__(self, input_dim, hidden_dim, embedding_dim, label_dim, num_layers,
@@ -63,6 +123,10 @@ class GcnEncoderGraph(nn.Module):
 
         self.bias = True
         self.gpu = args.gpu
+        if args.method == 'att':
+            self.att = True
+        else:
+            self.att = False
         if args is not None:
             self.bias = args.bias
 
@@ -82,19 +146,23 @@ class GcnEncoderGraph(nn.Module):
         for m in self.modules():
             if isinstance(m, GraphConv):
                 init.xavier_uniform_(m.weight.data, gain=nn.init.calculate_gain('relu'))
+                if m.att:
+                    init.xavier_uniform_(m.att_weight.data, gain=nn.init.calculate_gain('relu'))
+                if m.add_self:
+                    init.xavier_uniform_(m.self_weight.data, gain=nn.init.calculate_gain('relu'))
                 if m.bias is not None:
                     init.constant_(m.bias.data, 0.0)
 
     def build_conv_layers(self, input_dim, hidden_dim, embedding_dim, num_layers, add_self,
             normalize=False, dropout=0.0):
         conv_first = GraphConv(input_dim=input_dim, output_dim=hidden_dim, add_self=add_self,
-                normalize_embedding=normalize, bias=self.bias, gpu=self.gpu)
+                normalize_embedding=normalize, bias=self.bias, gpu=self.gpu, att=self.att)
         conv_block = nn.ModuleList(
                 [GraphConv(input_dim=hidden_dim, output_dim=hidden_dim, add_self=add_self,
-                        normalize_embedding=normalize, dropout=dropout, bias=self.bias, gpu=self.gpu)
+                        normalize_embedding=normalize, dropout=dropout, bias=self.bias, gpu=self.gpu, att=self.att)
                  for i in range(num_layers-2)])
         conv_last = GraphConv(input_dim=hidden_dim, output_dim=embedding_dim, add_self=add_self,
-                normalize_embedding=normalize, bias=self.bias, gpu=self.gpu)
+                normalize_embedding=normalize, bias=self.bias, gpu=self.gpu, att=self.att)
         return conv_first, conv_block, conv_last
 
     def build_pred_layers(self, pred_input_dim, pred_hidden_dims, label_dim, num_aggs=1):
@@ -140,7 +208,7 @@ class GcnEncoderGraph(nn.Module):
             The embedding dim is self.pred_input_dim
         '''
 
-        x = conv_first(x, adj)
+        x,_ = conv_first(x, adj)
         x = self.act(x)
         if self.bn:
             x = self.apply_bn(x)
@@ -149,19 +217,19 @@ class GcnEncoderGraph(nn.Module):
         #out, _ = torch.max(x, dim=1)
         #out_all.append(out)
         for i in range(len(conv_block)):
-            x = conv_block[i](x,adj)
+            x,_ = conv_block[i](x,adj)
             x = self.act(x)
             if self.bn:
                 x = self.apply_bn(x)
             x_all.append(x)
-        x = conv_last(x,adj)
+        x,adj_att = conv_last(x,adj)
         x_all.append(x)
         # x_tensor: [batch_size x num_nodes x embedding]
         x_tensor = torch.cat(x_all, dim=2)
         if embedding_mask is not None:
             x_tensor = x_tensor * embedding_mask
         self.embedding_tensor = x_tensor
-        return x_tensor
+        return x_tensor, adj_att
 
     def forward(self, x, adj, batch_num_nodes=None, **kwargs):
         # mask
@@ -232,10 +300,10 @@ class GcnEncoderNode(GcnEncoderGraph):
         else:
             embedding_mask = None
 
-        self.embedding_tensor = self.gcn_forward(x, adj,
+        self.embedding_tensor, adj_att = self.gcn_forward(x, adj,
                                             self.conv_first, self.conv_block, self.conv_last, embedding_mask)
         pred = self.pred_model(self.embedding_tensor)
-        return pred
+        return pred, adj_att
 
     def loss(self, pred, label):
         pred = torch.transpose(pred, 1, 2)

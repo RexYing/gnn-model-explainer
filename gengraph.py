@@ -143,7 +143,7 @@ def gen_syn3(nb_shapes = 80, width_basis = 300, feature_generator=None, m=5):
     return G, role_id, name
 
 
-def gen_syn4(nb_shapes = 60, width_basis = 8, feature_generator=None, m=5):
+def gen_syn4(nb_shapes = 60, width_basis = 8, feature_generator=None, m=4):
     basis_type = 'tree'
     list_shapes = [['cycle', 6]] * nb_shapes
 
