@@ -315,9 +315,9 @@ def train_node_classifier(G, labels, model, args, writer=None):
         model.zero_grad()
 
         if args.gpu:
-            ypred = model(x.cuda(), adj.cuda())
+            ypred, adj_att = model(x.cuda(), adj.cuda())
         else:
-            ypred = model(x, adj)
+            ypred, adj_att = model(x, adj)
         ypred_train = ypred[:,train_idx,:]
         if args.gpu:
             loss = model.loss(ypred_train, labels_train.cuda())
@@ -350,14 +350,16 @@ def train_node_classifier(G, labels, model, args, writer=None):
     # computation graph
     model.eval()
     if args.gpu:
-        ypred = model(x.cuda(), adj.cuda())
+        ypred,_ = model(x.cuda(), adj.cuda())
     else:
-        ypred = model(x, adj)
+        ypred,_ = model(x, adj)
     cg_data = {'adj': data['adj'],
                 'feat': data['feat'],
                 'label': data['labels'],
                 'pred': ypred.cpu().detach().numpy(),
                 'train_idx': train_idx}
+    # import pdb
+    # pdb.set_trace()
     io_utils.save_checkpoint(model, optimizer, args, num_epochs=-1, cg_dict=cg_data)
 
 def prepare_data(graphs, args, test_graphs=None, max_nodes=0):
@@ -421,7 +423,7 @@ def syn_task1(args, writer=None):
     if args.method == 'attn':
         print('Method: attn')
     else:
-        print('Method: base')
+        print('Method:', args.method)
         model = models.GcnEncoderNode(args.input_dim, args.hidden_dim, args.output_dim, num_classes,
                                        args.num_gc_layers, bn=args.bn, args=args)
         if args.gpu:
@@ -438,7 +440,7 @@ def syn_task2(args, writer=None):
     if args.method == 'attn':
         print('Method: attn')
     else:
-        print('Method: base')
+        print('Method:', args.method)
         model = models.GcnEncoderNode(input_dim, args.hidden_dim, args.output_dim, num_classes,
                                        args.num_gc_layers, bn=args.bn, args=args)
         if args.gpu:
@@ -456,7 +458,7 @@ def syn_task3(args, writer=None):
     if args.method == 'attn':
         print('Method: attn')
     else:
-        print('Method: base')
+        print('Method:', args.method)
         model = models.GcnEncoderNode(args.input_dim, args.hidden_dim, args.output_dim, num_classes,
                                        args.num_gc_layers, bn=args.bn, args=args)
         if args.gpu:
@@ -474,7 +476,7 @@ def syn_task4(args, writer=None):
     if args.method == 'attn':
         print('Method: attn')
     else:
-        print('Method: base')
+        print('Method:', args.method)
         model = models.GcnEncoderNode(args.input_dim, args.hidden_dim, args.output_dim, num_classes,
                                        args.num_gc_layers, bn=args.bn, args=args)
 

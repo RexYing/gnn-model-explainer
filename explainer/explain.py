@@ -23,6 +23,9 @@ from sklearn.metrics import roc_auc_score
 import pdb
 from sklearn.metrics import recall_score
 from sklearn.metrics import precision_score
+from sklearn.metrics import roc_auc_score
+from sklearn.metrics import precision_recall_curve
+
 
 
 # import models_gcn.GCN as GCN
@@ -101,7 +104,7 @@ class Explainer:
         if self.args.gpu:
             adj, x, label = adj.cuda(), x.cuda(), label.cuda()
 
-        preds = self.model(x, adj)
+        preds,_ = self.model(x, adj)
         preds.retain_grad()
         self.embedding = self.model.embedding_tensor
         loss = self.model.loss(preds, label)
@@ -125,7 +128,7 @@ class Explainer:
         sub_label = self.label[graph_idx][neighbors]
         return node_idx_new, sub_adj, sub_feat, sub_label, neighbors
 
-    def explain(self, node_idx, graph_idx=0, graph_mode=False, unconstrained=False):
+    def explain(self, node_idx, graph_idx=0, graph_mode=False, unconstrained=False, model='exp'):
         '''Explain a single node prediction
         '''
         # index of the query node in the new adj
@@ -167,37 +170,57 @@ class Explainer:
             explainer = explainer.cuda()
 
         self.model.eval()
-        explainer.train()
-        begin_time = time.time()
-        for epoch in range(self.args.num_epochs):
+
+
+        if model=='grad':
             explainer.zero_grad()
-            explainer.optimizer.zero_grad()
-            ypred = explainer(node_idx_new, unconstrained=unconstrained)
-            loss = explainer.loss(ypred, pred_label, node_idx_new, epoch)
-            loss.backward()
+            # pdb.set_trace()
+            adj_grad = torch.abs(explainer.adj_feat_grad(node_idx_new, pred_label[node_idx_new])[0])[graph_idx]
+            masked_adj = (adj_grad + adj_grad.t())
+            masked_adj = nn.functional.sigmoid(masked_adj)
+            masked_adj = masked_adj.cpu().detach().numpy()
 
-            explainer.optimizer.step()
-            if explainer.scheduler is not None:
-                explainer.scheduler.step()
+        else:
+            explainer.train()
+            begin_time = time.time()
+            for epoch in range(self.args.num_epochs):
+                explainer.zero_grad()
+                explainer.optimizer.zero_grad()
+                ypred,adj_att = explainer(node_idx_new, unconstrained=unconstrained)
+                loss = explainer.loss(ypred, pred_label, node_idx_new, epoch)
+                loss.backward()
 
-            mask_density = explainer.mask_density()
-            if self.print_training:
-                print('epoch: ', epoch, '; loss: ', loss.item(),
-                      '; mask density: ', mask_density.item(),
-                      '; pred: ', ypred)
+                explainer.optimizer.step()
+                if explainer.scheduler is not None:
+                    explainer.scheduler.step()
 
-            single_subgraph_label = sub_label.squeeze()
-            if self.writer is not None:
-                self.writer.add_scalar('mask/density', mask_density, epoch)
-                self.writer.add_scalar('optimization/lr', explainer.optimizer.param_groups[0]['lr'], epoch)
-                if epoch % 100 == 0:
-                    explainer.log_mask(epoch)
-                    explainer.log_masked_adj(node_idx_new, epoch, label=single_subgraph_label)
-                    explainer.log_adj_grad(node_idx_new, pred_label, epoch,
-                            label=single_subgraph_label)
+                mask_density = explainer.mask_density()
+                if self.print_training:
+                    print('epoch: ', epoch, '; loss: ', loss.item(),
+                          '; mask density: ', mask_density.item(),
+                          '; pred: ', ypred)
 
-        print('finished training in ', time.time() - begin_time)
-        masked_adj = explainer.masked_adj[0].cpu().detach().numpy()
+                single_subgraph_label = sub_label.squeeze()
+                # if self.writer is not None:
+                #     self.writer.add_scalar('mask/density', mask_density, epoch)
+                #     self.writer.add_scalar('optimization/lr', explainer.optimizer.param_groups[0]['lr'], epoch)
+                #     if epoch % 100 == 0:
+                #         explainer.log_mask(epoch)
+                #         explainer.log_masked_adj(node_idx_new, epoch, label=single_subgraph_label)
+                #         explainer.log_adj_grad(node_idx_new, pred_label, epoch,
+                #                 label=single_subgraph_label)
+                if model != 'exp':
+                    break
+
+            print('finished training in ', time.time() - begin_time)
+            if model =='exp':
+                masked_adj = explainer.masked_adj[0].cpu().detach().numpy()
+            else:
+                adj_att = nn.functional.sigmoid(adj_att).squeeze()
+                masked_adj = adj_att.cpu().detach().numpy()
+                # pdb.set_trace()
+
+
         return masked_adj
 
     def align(self, ref_feat, ref_adj, ref_node_idx, curr_feat, curr_adj, curr_node_idx, args):
@@ -231,7 +254,6 @@ class Explainer:
 
     def explain_nodes(self, node_indices, args, graph_idx=0):
         masked_adjs = [self.explain(node_idx, graph_idx=graph_idx) for node_idx in node_indices]
-
         ref_idx = node_indices[0]
         ref_adj = masked_adjs[0]
         curr_idx = node_indices[1]
@@ -278,55 +300,139 @@ class Explainer:
         return masked_adjs
 
 
-    def make_pred_real(self,G,start,type='house'):
-        if type=='house':
-            num_pred = max(G.number_of_edges(),6)
-            real = np.ones(num_pred)
-            pred = np.zeros(num_pred)
-            if G.has_edge(start, start+1):
-                pred[0] = 1
-            if G.has_edge(start+1, start+2):
-                pred[1] = 1
-            if G.has_edge(start+2, start+3):
-                pred[2] = 1
-            if G.has_edge(start+3, start):
-                pred[3] = 1
-            if G.has_edge(start+4, start):
-                pred[4] = 1
-            if G.has_edge(start+4, start+1):
-                pred[5] = 1
+    # def make_pred_real(self,G,start):
+    #     # house graph
+    #     if self.args.dataset == 'syn1' or self.args.dataset == 'syn2':
+    #         num_pred = max(G.number_of_edges(),6)
+    #         real = np.ones(num_pred)
+    #         pred = np.zeros(num_pred)
+    #         if G.has_edge(start, start+1):
+    #             pred[0] = G[start][start+1]['weight']
+    #         if G.has_edge(start+1, start+2):
+    #             pred[1] = 1
+    #         if G.has_edge(start+2, start+3):
+    #             pred[2] = 1
+    #         if G.has_edge(start+3, start):
+    #             pred[3] = 1
+    #         if G.has_edge(start+4, start):
+    #             pred[4] = 1
+    #         if G.has_edge(start+4, start+1):
+    #             pred[5] = 1
+    #         pdb.set_trace()
+    #         precision = precision_score(real,pred)
+    #         recall = recall_score(real,pred)
+    #
+    #     # cycle graph
+    #     elif self.args.dataset == 'syn4':
+    #         num_pred = max(G.number_of_edges(),6)
+    #         real = np.ones(num_pred)
+    #         pred = np.zeros(num_pred)
+    #         if G.has_edge(start, start+1):
+    #             pred[0] = 1
+    #         if G.has_edge(start+1, start+2):
+    #             pred[1] = 1
+    #         if G.has_edge(start+2, start+3):
+    #             pred[2] = 1
+    #         if G.has_edge(start+3, start+4):
+    #             pred[3] = 1
+    #         if G.has_edge(start+4, start+5):
+    #             pred[4] = 1
+    #         if G.has_edge(start+5, start):
+    #             pred[5] = 1
+    #
+    #         precision = precision_score(real,pred)
+    #         recall = recall_score(real,pred)
+    #
+    #     else:
+    #         precision, recall = 0, 0
+    #
+    #     return precision,recall
 
-            precision = precision_score(real,pred)
-            recall = recall_score(real,pred)
-
-        return precision,recall
 
 
-    def explain_nodes_gnn_stats(self, node_indices, args, graph_idx=0):
-        masked_adjs = [self.explain(node_idx, graph_idx=graph_idx) for node_idx in node_indices]
+    def make_pred_real(self, adj, start):
+        # house graph
+        if self.args.dataset == 'syn1' or self.args.dataset == 'syn2':
+            # num_pred = max(G.number_of_edges(), 6)
+            pred = adj[np.triu(adj) > 0]
+            real = adj.copy()
 
+            if real[start][start + 1]>0:
+                real[start][start + 1] = 10
+            if real[start + 1][start + 2]>0:
+                real[start + 1][start + 2] = 10
+            if real[start + 2][start + 3]>0:
+                real[start + 2][start + 3] = 10
+            if real[start][start + 3]>0:
+                real[start][start + 3] = 10
+            if real[start][start + 4]>0:
+                real[start][start + 4] = 10
+            if real[start + 1][start + 4]:
+                real[start + 1][start + 4] = 10
+            real = real[np.triu(real) > 0]
+            real[real!=10] = 0
+            real[real==10] = 1
+
+            # auc = roc_auc_score(real, pred)
+
+        # cycle graph
+        elif self.args.dataset == 'syn4':
+            pred = adj[np.triu(adj) > 0]
+            real = adj.copy()
+            # pdb.set_trace()
+            if real[start][start + 1] > 0:
+                real[start][start + 1] = 10
+            if real[start + 1][start + 2] > 0:
+                real[start + 1][start + 2] = 10
+            if real[start + 2][start + 3] > 0:
+                real[start + 2][start + 3] = 10
+            if real[start+3][start + 4] > 0:
+                real[start+3][start + 4] = 10
+            if real[start+4][start + 5] > 0:
+                real[start+4][start + 5] = 10
+            if real[start][start + 5]:
+                real[start][start + 5] = 10
+            real = real[np.triu(real) > 0]
+            real[real != 10] = 0
+            real[real == 10] = 1
+
+        return pred, real
+
+
+    def explain_nodes_gnn_stats(self, node_indices, args, graph_idx=0,model='grad'):
+        masked_adjs = [self.explain(node_idx, graph_idx=graph_idx, model=model) for node_idx in node_indices]
+        # pdb.set_trace()
         graphs = []
         feats = []
         adjs = []
-        precision_all = 0
-        recall_all = 0
+        pred_all = []
+        real_all = []
         for i,idx in enumerate(node_indices):
             new_idx, _, feat, _, _ = self.extract_neighborhood(idx)
             G = io_utils.denoise_graph(masked_adjs[i], new_idx, feat, threshold=0.1)
-            precision, recall = self.make_pred_real(G,new_idx)
-            precision_all += precision
-            recall_all += recall
-            # pdb.set_trace()
+            pred,real = self.make_pred_real(masked_adjs[i],new_idx)
+            pred_all.append(pred)
+            real_all.append(real)
             denoised_feat = np.array([G.node[node]['feat'] for node in G.nodes()])
             denoised_adj = nx.to_numpy_matrix(G)
             graphs.append(G)
             feats.append(denoised_feat)
             adjs.append(denoised_adj)
-        precision_all /= len(node_indices)
-        recall_all /= len(node_indices)
 
-        with open('log/pr/pr'+str(time.time())+'.txt', 'w') as f:
-            f.write('dataset: {}, model: {}, precision: {}, recall: {}\n'.format(self.args.dataset, 'lexp', str(precision_all), str(recall_all)))
+        pred_all = np.concatenate((pred_all),axis=0)
+        real_all = np.concatenate((real_all),axis=0)
+
+        auc_all = roc_auc_score(real_all,pred_all)
+        precision, recall, thresholds = precision_recall_curve(real_all,pred_all)
+
+        plt.switch_backend('agg')
+        plt.plot(recall, precision)
+        plt.savefig('log/pr/pr_'+self.args.dataset+'_'+model+'.png')
+
+        plt.close()
+
+        with open('log/pr/auc_'+self.args.dataset+'_'+model+'.txt', 'w') as f:
+            f.write('dataset: {}, model: {}, auc: {}\n'.format(self.args.dataset, 'exp', str(auc_all)))
 
 
 
@@ -367,9 +473,7 @@ class Explainer:
 
         X = np.concatenate(pred_all, axis=0)
 
-        import pdb
         # pdb.set_trace()
-        import matplotlib.pyplot as plt
         from sklearn.manifold import TSNE
 
         plt.switch_backend('agg')
@@ -625,13 +729,13 @@ class ExplainModule(nn.Module):
             x = x * feat_mask
             #x = x + z * (1 - feat_mask)
 
-        ypred = self.model(x, self.masked_adj)
+        ypred,adj_att = self.model(x, self.masked_adj)
         if self.graph_mode:
           res = nn.Softmax(dim=0)(ypred[0])
         else:
           node_pred = ypred[self.graph_idx, node_idx, :]
           res = nn.Softmax(dim=0)(node_pred)
-        return res
+        return res,adj_att
 
     def adj_feat_grad(self, node_idx, pred_label_node):
         self.model.zero_grad()
@@ -646,7 +750,7 @@ class ExplainModule(nn.Module):
             label = self.label.cuda()
         else:
             x, adj = self.x, self.adj
-        ypred = self.model(x, adj)
+        ypred,_ = self.model(x, adj)
         if self.graph_mode:
           logit = nn.Softmax(dim=0)(ypred[0])
         else:
@@ -777,6 +881,7 @@ class ExplainModule(nn.Module):
         else:
           predicted_label = pred_label[node_idx]
           adj_grad = torch.abs(self.adj_feat_grad(node_idx, predicted_label)[0])[self.graph_idx]
+        # pdb.set_trace()
         adj_grad = adj_grad + adj_grad.t()
         io_utils.log_matrix(self.writer, adj_grad, 'grad/adj', epoch)
         #self.adj.requires_grad = False

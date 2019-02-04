@@ -73,8 +73,8 @@ def arg_parse():
     parser.add_argument('--align-steps', dest='align_steps', type=int,
             help='Number of iterations to find P, the alignment matrix.')
 
-    parser.add_argument('--method', dest='method',
-            help='Method. Possible values: base, ')
+    parser.add_argument('--method', dest='method', type=str,
+            help='Method. Possible values: base, att')
     parser.add_argument('--name-suffix', dest='name_suffix',
             help='suffix added to the output filename')
 
@@ -174,7 +174,7 @@ def main():
             # masked_adj = explainer.explain_nodes([370,390], prog_args)
             # masked_adj = explainer.explain_nodes_gnn_cluster([370,390], prog_args)
             # masked_adj = explainer.explain_nodes_gnn_cluster(range(400, 700, 5), prog_args)
-            masked_adj = explainer.explain_nodes_gnn_stats(range(400, 700, 5), prog_args)
+            masked_adj = explainer.explain_nodes_gnn_stats(range(511, 811, 6), prog_args)
             #pickle.dump(masked_adj, open('out/masked_adjs.pkl', 'wb'))
 
 
