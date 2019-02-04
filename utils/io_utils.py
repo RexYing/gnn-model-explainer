@@ -94,8 +94,6 @@ def denoise_graph(adj, node_idx, feat=None, label=None, threshold=0.1, threshold
             adj[i,j] >= threshold]
     G.add_weighted_edges_from(weighted_edge_list)
     Gc = max(nx.connected_component_subgraphs(G), key=len) 
-    import pdb
-    pdb.set_trace()
     return Gc
 
 def log_graph(writer, Gc, name, identify_self=True, nodecolor='label', epoch=0, fig_size=(4,3),

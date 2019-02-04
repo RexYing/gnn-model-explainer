@@ -400,7 +400,7 @@ class Explainer:
         return pred, real
 
 
-    def explain_nodes_gnn_stats(self, node_indices, args, graph_idx=0,model='grad'):
+    def explain_nodes_gnn_stats(self, node_indices, args, graph_idx=0,model='att'):
         masked_adjs = [self.explain(node_idx, graph_idx=graph_idx, model=model) for node_idx in node_indices]
         # pdb.set_trace()
         graphs = []
@@ -410,7 +410,8 @@ class Explainer:
         real_all = []
         for i,idx in enumerate(node_indices):
             new_idx, _, feat, _, _ = self.extract_neighborhood(idx)
-            G = io_utils.denoise_graph(masked_adjs[i], new_idx, feat, threshold=0.1)
+            G = io_utils.denoise_graph(masked_adjs[i], new_idx, feat,threshold_num=20)
+            # pdb.set_trace()
             pred,real = self.make_pred_real(masked_adjs[i],new_idx)
             pred_all.append(pred)
             real_all.append(real)
@@ -419,6 +420,8 @@ class Explainer:
             graphs.append(G)
             feats.append(denoised_feat)
             adjs.append(denoised_adj)
+            io_utils.log_graph(self.writer, G,
+                               'graph/{}_{}_{}'.format(self.args.dataset,model,i), identify_self=True)
 
         pred_all = np.concatenate((pred_all),axis=0)
         real_all = np.concatenate((real_all),axis=0)
