@@ -548,11 +548,11 @@ class Explainer:
           masked_adj = self.explain(node_idx=0, graph_idx=graph_idx, graph_mode=True)
           G_denoised = io_utils.denoise_graph(masked_adj, 0, threshold=0.1, feat=self.feat[graph_idx])
           label = self.label[graph_idx]
-          io_utils.log_graph(self.writer, G_denoised,
+          io_utils.log_graph(self.writer, G_denoised, 
                   'graph/graphidx_{}_label={}'.format(graph_idx, label), identify_self=False, nodecolor='feat')
           masked_adjs.append(masked_adj)
-
-          G_orig = io_utils.denoise_graph(self.adj[graph_idx], 0, feat=self.feat[graph_idx], threshold=0)
+          
+          G_orig = io_utils.denoise_graph(self.adj[graph_idx], 0, feat=self.feat[graph_idx], threshold=0) 
           #G_orig = nx.from_numpy_matrix(self.adj[graph_idx].cpu().detach().numpy())
           io_utils.log_graph(self.writer, G_orig, 'graph/graphidx_{}'.format(graph_idx), identify_self=False, nodecolor='feat')
 
@@ -644,7 +644,7 @@ class ExplainModule(nn.Module):
         init_strategy='normal'
         num_nodes = adj.size()[1]
         self.mask, self.mask_bias = self.construct_edge_mask(num_nodes, init_strategy=init_strategy)
-
+        
         self.feat_mask = self.construct_feat_mask(x.size(-1), init_strategy='constant')
         params = [self.mask, self.feat_mask]
         if self.mask_bias is not None:
@@ -692,7 +692,7 @@ class ExplainModule(nn.Module):
             nn.init.constant_(mask_bias, 0.0)
         else:
             mask_bias = None
-
+       
         return mask, mask_bias
 
     def _masked_adj(self):
@@ -735,7 +735,7 @@ class ExplainModule(nn.Module):
 
         ypred,adj_att = self.model(x, self.masked_adj)
         if self.graph_mode:
-          res = nn.Softmax(dim=0)(ypred[0])
+          res = nn.Softmax(dim=0)(ypred[0]) 
         else:
           node_pred = ypred[self.graph_idx, node_idx, :]
           res = nn.Softmax(dim=0)(node_pred)
@@ -778,7 +778,7 @@ class ExplainModule(nn.Module):
         else:
             pred_label_node = pred_label if self.graph_mode else pred_label[node_idx]
             gt_label_node = self.label if self.graph_mode else self.label[0][node_idx]
-            logit = pred[gt_label_node]
+            logit = pred[gt_label_node] 
             pred_loss = -torch.log(logit)
         # size
         mask = self.mask
@@ -803,7 +803,7 @@ class ExplainModule(nn.Module):
         # laplacian
         D = torch.diag(torch.sum(self.masked_adj[0], 0))
         m_adj = self.masked_adj if self.graph_mode else self.masked_adj[self.graph_idx]
-        L = D - m_adj
+        L = D - m_adj 
         pred_label_t = torch.tensor(pred_label, dtype=torch.float)
         if self.args.gpu:
             pred_label_t = pred_label_t.cuda()
@@ -908,22 +908,26 @@ class ExplainModule(nn.Module):
 
         adj_grad = adj_grad.detach().numpy()
         if self.graph_mode:
-            G = io_utils.denoise_graph(adj_grad, node_idx, feat=self.x[0], threshold=0.0099)
+            print('GRAPH model')
+            G = io_utils.denoise_graph(adj_grad, node_idx, feat=self.x[0], threshold=0.035)
             io_utils.log_graph(self.writer, G, name='grad/graph', epoch=epoch, identify_self=False,
-                    label_node_feat=True, nodecolor='feat', edge_vmax=0.05)
+                    label_node_feat=True, nodecolor='feat', edge_vmax=0.06, args=self.args)
         else:
-            G = io_utils.denoise_graph(adj_grad, node_idx, label=label, threshold=0.001)
-            io_utils.log_graph(self.writer, G, name='grad/graph', epoch=epoch, edge_vmax=0.012)
+            #G = io_utils.denoise_graph(adj_grad, node_idx, label=label, threshold=0.5)
+            G = io_utils.denoise_graph(adj_grad, node_idx, threshold=0.001)
+            io_utils.log_graph(self.writer, G, name='grad/graph', epoch=epoch, edge_vmax=0.008,
+                    args=self.args)
 
     def log_masked_adj(self, node_idx, epoch, label=None):
         # use [0] to remove the batch dim
         masked_adj = self.masked_adj[0].cpu().detach().numpy()
         if self.graph_mode:
-            G = io_utils.denoise_graph(masked_adj, node_idx, feat=self.x[0], threshold=0.2)
+            G = io_utils.denoise_graph(masked_adj, node_idx, feat=self.x[0], threshold=0.4)
             io_utils.log_graph(self.writer, G, name='mask/graph', identify_self=False,
-                    nodecolor='feat', epoch=epoch, label_node_feat=True, edge_vmax=0.9)
+                    nodecolor='feat', epoch=epoch, label_node_feat=True, edge_vmax=0.9, args=self.args)
         else:
-            G = io_utils.denoise_graph(masked_adj, node_idx, label=label)
+            #G = io_utils.denoise_graph(masked_adj, node_idx, label=label)
+            G = io_utils.denoise_graph(masked_adj, node_idx)
             io_utils.log_graph(self.writer, G, name='mask/graph', identify_self=True,
-                    nodecolor='label', epoch=epoch, edge_vmax=0.7)
+                    nodecolor='label', epoch=epoch, edge_vmax=0.7, args=self.args)
 

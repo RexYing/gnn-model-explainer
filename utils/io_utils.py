@@ -93,13 +93,13 @@ def denoise_graph(adj, node_idx, feat=None, label=None, threshold=0.1, threshold
     weighted_edge_list = [(i, j, adj[i, j]) for i in range(num_nodes) for j in range(num_nodes) if
             adj[i,j] >= threshold]
     G.add_weighted_edges_from(weighted_edge_list)
-    Gc = max(nx.connected_component_subgraphs(G), key=len)
+    Gc = max(nx.connected_component_subgraphs(G), key=len) 
     import pdb
     pdb.set_trace()
     return Gc
 
 def log_graph(writer, Gc, name, identify_self=True, nodecolor='label', epoch=0, fig_size=(4,3),
-        dpi=300, label_node_feat=False, edge_vmax=1.0):
+        dpi=300, label_node_feat=False, edge_vmax=1.0, args=None):
     '''
     Args:
         nodecolor: the color of node, can be determined by 'label', or 'feat'. For feat, it needs to
@@ -162,7 +162,13 @@ def log_graph(writer, Gc, name, identify_self=True, nodecolor='label', epoch=0, 
             alpha=0.8)
     fig.axes[0].xaxis.set_visible(False)
     fig.canvas.draw()
-    plt.savefig('log/' + name+'.png')
+    #plt.savefig('log/' + name+'.png')
+    if args is None:
+        plt.savefig('log/' + name+'.pdf', format='pdf')
+    else:
+        plt.savefig('log/' + name + gen_explainer_prefix(args) + '_' + str(epoch) + '.pdf', format='pdf')
+        print('log/' + name + gen_explainer_prefix(args) + '_' + str(epoch) + '.pdf')
+
     img = tensorboardX.utils.figure_to_image(fig)
     writer.add_image(name, img, epoch)
 

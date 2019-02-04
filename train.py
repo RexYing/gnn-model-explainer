@@ -42,7 +42,7 @@ def evaluate(dataset, model, args, name='Validation', max_num_examples=None):
         batch_num_nodes = data['num_nodes'].int().numpy()
         assign_input = Variable(data['assign_feats'].float(), requires_grad=False).cuda()
 
-        ypred = model(h0, adj, batch_num_nodes, assign_x=assign_input)
+        epred = model(h0, adj, batch_num_nodes, assign_x=assign_input)
         _, indices = torch.max(ypred, 1)
         preds.append(indices.cpu().data.numpy())
 
@@ -62,12 +62,15 @@ def evaluate(dataset, model, args, name='Validation', max_num_examples=None):
 def evaluate_node(ypred, labels, train_idx, test_idx):
     _, pred_labels = torch.max(ypred, 2)
     pred_labels = pred_labels.numpy()
-
+    
     pred_train = np.ravel(pred_labels[:, train_idx])
     pred_test = np.ravel(pred_labels[:, test_idx])
     labels_train = np.ravel(labels[:, train_idx])
     labels_test = np.ravel(labels[:, test_idx])
-
+    #pred_train = np.ravel([pred_labels[i, train_idx[i]] for i in range(10)])
+    #pred_test = np.ravel([pred_labels[i, test_idx[i]] for i in range(10)])
+    #labels_train = np.ravel([labels[i, train_idx[i]] for i in range(10)])
+    #labels_test = np.ravel([labels[i, test_idx[i]] for i in range(10)])
     result_train = {'prec': metrics.precision_score(labels_train, pred_train, average='macro'),
               'recall': metrics.recall_score(labels_train, pred_train, average='macro'),
               'acc': metrics.accuracy_score(labels_train, pred_train),
@@ -297,6 +300,7 @@ def train_node_classifier(G, labels, model, args, writer=None):
     num_nodes = G.number_of_nodes()
     num_train = int(num_nodes * args.train_ratio)
     idx = [i for i in range(num_nodes)]
+
     np.random.shuffle(idx)
     train_idx = idx[:num_train]
     test_idx = idx[num_train:]
@@ -305,7 +309,6 @@ def train_node_classifier(G, labels, model, args, writer=None):
     labels_train = torch.tensor(data['labels'][:,train_idx], dtype=torch.long)
     adj = torch.tensor(data['adj'], dtype=torch.float)
     x = torch.tensor(data['feat'], requires_grad=True, dtype=torch.float)
-
     scheduler, optimizer = train_utils.build_optimizer(args, model.parameters(),
             weight_decay=args.weight_decay)
     model.train()
@@ -360,6 +363,90 @@ def train_node_classifier(G, labels, model, args, writer=None):
                 'train_idx': train_idx}
     # import pdb
     # pdb.set_trace()
+    io_utils.save_checkpoint(model, optimizer, args, num_epochs=-1, cg_dict=cg_data)
+
+def train_node_classifier_multigraph(G_list, labels, model, args, writer=None):
+    train_idx_all, test_idx_all = [],[]
+    # train/test split only for nodes
+    num_nodes = G_list[0].number_of_nodes()
+    num_train = int(num_nodes * args.train_ratio)
+    idx = [i for i in range(num_nodes)]
+    np.random.shuffle(idx)
+    train_idx = idx[:num_train]; train_idx_all.append(train_idx)
+    test_idx = idx[num_train:]; test_idx_all.append(test_idx)
+
+    data = gengraph.preprocess_input_graph(G_list[0], labels[0])
+    all_labels = data['labels']
+    labels_train = torch.tensor(data['labels'][:,train_idx], dtype=torch.long)
+    adj = torch.tensor(data['adj'], dtype=torch.float)
+    x = torch.tensor(data['feat'], requires_grad=True, dtype=torch.float)
+
+    for i in range(1,len(G_list)):
+      np.random.shuffle(idx)
+      train_idx = idx[:num_train]; train_idx_all.append(train_idx)
+      test_idx = idx[num_train:]; test_idx_all.append(test_idx)
+      data = gengraph.preprocess_input_graph(G_list[i], labels[i])
+      all_labels = np.concatenate((all_labels, data['labels']), axis=0)
+      labels_train = torch.cat([labels_train, torch.tensor(data['labels'][:, train_idx], dtype=torch.long)], dim=0)
+      adj = torch.cat([adj, torch.tensor(data['adj'], dtype=torch.float)])
+      x = torch.cat([x, torch.tensor(data['feat'], requires_grad = True, dtype=torch.float)])
+
+    scheduler, optimizer = train_utils.build_optimizer(args, model.parameters(),
+            weight_decay=args.weight_decay)
+    model.train()
+    ypred = None
+    for epoch in range(args.num_epochs):
+        begin_time = time.time()
+        model.zero_grad()
+
+        if args.gpu:
+            ypred = model(x.cuda(), adj.cuda())
+        else:
+            ypred = model(x, adj)
+        # normal indexing
+        ypred_train = ypred[:,train_idx,:]
+        # in multigraph setting we can't directly access all dimensions so we need to gather all the training instances
+        all_train_idx = [item for sublist in train_idx_all for item in sublist]
+        ypred_train_cmp = torch.cat([ypred[i, train_idx_all[i],:] for i in range(10)], dim=0).reshape(10,146,6)
+        if args.gpu:
+            loss = model.loss(ypred_train_cmp, labels_train.cuda())
+        else:
+            loss = model.loss(ypred_train_cmp, labels_train)
+        loss.backward()
+        nn.utils.clip_grad_norm(model.parameters(), args.clip)
+
+        optimizer.step()
+        for param_group in optimizer.param_groups:
+            print(param_group['lr'])
+        elapsed = time.time() - begin_time
+
+        result_train, result_test = evaluate_node(ypred.cpu(), all_labels, train_idx_all, test_idx_all)
+        if writer is not None:
+            writer.add_scalar('loss/avg_loss', loss, epoch)
+            writer.add_scalars('prec', {'train': result_train['prec'], 'test': result_test['prec']}, epoch)
+            writer.add_scalars('recall', {'train': result_train['recall'], 'test': result_test['recall']}, epoch)
+            writer.add_scalars('acc', {'train': result_train['acc'], 'test': result_test['acc']}, epoch)
+
+        print('epoch: ', epoch, '; loss: ', loss.item(),
+              '; train_acc: ', result_train['acc'], '; test_acc: ', result_test['acc'],
+              '; epoch time: ', '{0:0.2f}'.format(elapsed))
+
+        if scheduler is not None:
+            scheduler.step()
+    print(result_train['conf_mat'])
+    print(result_test['conf_mat'])
+
+    # computation graph
+    model.eval()
+    if args.gpu:
+        ypred = model(x.cuda(), adj.cuda())
+    else:
+        ypred = model(x, adj)
+    cg_data = {'adj': adj.cpu().detach().numpy(),
+                'feat': x.cpu().detach().numpy(),
+                'label': all_labels,
+                'pred': ypred.cpu().detach().numpy(),
+                'train_idx': train_idx_all}
     io_utils.save_checkpoint(model, optimizer, args, num_epochs=-1, cg_dict=cg_data)
 
 def prepare_data(graphs, args, test_graphs=None, max_nodes=0):
@@ -531,6 +618,64 @@ def pkl_task(args, feat=None):
             args.num_gc_layers, bn=args.bn).cuda()
     train(train_dataset, model, args, test_dataset=test_dataset)
     evaluate(test_dataset, model, args, 'Validation')
+
+def enron_task_multigraph(args, idx=None, writer=None):
+    labels_dict = {'None':5,'Employee': 0, 'Vice President': 1, 'Manager': 2, 'Trader':3, 'CEO+Managing Director+Director+President':4}
+    max_enron_id = 183 
+    if idx is None:
+      G_list = []; labels_list = []
+      for i in range(10):
+        net = pickle.load(open('data/gnn-explainer-enron/enron_slice_{}.pkl'.format(i), 'rb'))
+        net.add_nodes_from(range(max_enron_id))
+        labels=[n[1].get('role', 'None') for n in net.nodes(data=True)]
+        labels_num = [labels_dict[l] for l in labels]
+        featgen_const = featgen.ConstFeatureGen(np.ones(args.input_dim, dtype=float))
+        featgen_const.gen_node_features(net)
+        G_list.append(net)
+        labels_list.append(labels_num)
+      #train_dataset, test_dataset, max_num_nodes = prepare_data(G_list, args)
+      model = models.GcnEncoderNode(args.input_dim, args.hidden_dim, args.output_dim, args.num_classes,
+                                    args.num_gc_layers, bn=args.bn, args=args)
+      if args.gpu:
+          model = model.cuda()
+      print(labels_num) 
+      train_node_classifier_multigraph(G_list, labels_list, model, args, writer=writer)
+    else:
+      print("Running Enron full task")
+ 
+def enron_task(args, idx=None, writer=None):
+    labels_dict = {'None':5,'Employee': 0, 'Vice President': 1, 'Manager': 2, 'Trader':3, 'CEO+Managing Director+Director+President':4}
+    max_enron_id = 183 
+    if idx is None:
+        G_list = []; labels_list = []
+        for i in range(10):
+            net = pickle.load(open('data/gnn-explainer-enron/enron_slice_{}.pkl'.format(i), 'rb'))
+            #net.add_nodes_from(range(max_enron_id))
+            #labels=[n[1].get('role', 'None') for n in net.nodes(data=True)]
+            #labels_num = [labels_dict[l] for l in labels]
+            featgen_const = featgen.ConstFeatureGen(np.ones(args.input_dim, dtype=float))
+            featgen_const.gen_node_features(net)
+            G_list.append(net)
+            print(net.number_of_nodes())
+            #labels_list.append(labels_num)
+
+        G = nx.disjoint_union_all(G_list)
+        model = models.GcnEncoderNode(args.input_dim, args.hidden_dim, args.output_dim,
+                                      len(labels_dict), args.num_gc_layers, bn=args.bn, args=args)
+        labels=[n[1].get('role', 'None') for n in G.nodes(data=True)]
+        labels_num = [labels_dict[l] for l in labels]
+        for i in range(5):
+            print('Label ', i, ': ', labels_num.count(i))
+
+        print('Total num nodes: ', len(labels_num))
+        print(labels_num)
+
+        if args.gpu:
+            model = model.cuda()
+        train_node_classifier(G, labels_num, model, args, writer=writer)
+    else:
+        print("Running Enron full task")
+   
 
 def benchmark_task(args, writer=None, feat='node-label'):
     graphs = load_data.read_graphfile(args.datadir, args.bmname, max_nodes=args.max_nodes)
@@ -752,6 +897,8 @@ def main():
             syn_task4(prog_args, writer=writer)
         elif prog_args.dataset == 'syn5':
             syn_task5(prog_args, writer=writer)
+        elif prog_args.dataset == 'enron':
+            enron_task(prog_args, writer=writer)
 
 
     writer.close()

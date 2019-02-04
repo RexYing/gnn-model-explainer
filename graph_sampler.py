@@ -20,7 +20,8 @@ class GraphSampler(torch.utils.data.Dataset):
             self.max_num_nodes = max_num_nodes
 
         #if features == 'default':
-        self.feat_dim = G_list[0].node[0]['feat'].shape[0]
+        existing_node = list(G_list[0].nodes)[-1]
+        self.feat_dim = G_list[0].node[existing_node]['feat'].shape[0]
 
         for G in G_list:
             adj = np.array(nx.to_numpy_matrix(G))
