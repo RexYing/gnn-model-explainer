@@ -610,8 +610,8 @@ def enron_task(args, idx=None, writer=None):
       #train_dataset, test_dataset, max_num_nodes = prepare_data(G_list, args)
       model = models.GcnEncoderNode(args.input_dim, args.hidden_dim, args.output_dim, args.num_classes,
                                     args.num_gc_layers, bn=args.bn, args=args)
-      if args.cuda:
-        model = model.cuda()
+      if args.gpu:
+          model = model.cuda()
       print(labels_num) 
       train_node_classifier_multigraph(G_list, labels_list, model, args, writer=writer)
     else:
