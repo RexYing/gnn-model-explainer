@@ -597,7 +597,7 @@ def pkl_task(args, feat=None):
     train(train_dataset, model, args, test_dataset=test_dataset)
     evaluate(test_dataset, model, args, 'Validation')
 
-def enron_task(args, idx=None, writer=None):
+def enron_task_multigraph(args, idx=None, writer=None):
     labels_dict = {'None':5,'Employee': 0, 'Vice President': 1, 'Manager': 2, 'Trader':3, 'CEO+Managing Director+Director+President':4}
     max_enron_id = 183 
     if idx is None:
@@ -620,8 +620,40 @@ def enron_task(args, idx=None, writer=None):
       train_node_classifier_multigraph(G_list, labels_list, model, args, writer=writer)
     else:
       print("Running Enron full task")
+ 
+def enron_task(args, idx=None, writer=None):
+    labels_dict = {'None':5,'Employee': 0, 'Vice President': 1, 'Manager': 2, 'Trader':3, 'CEO+Managing Director+Director+President':4}
+    max_enron_id = 183 
+    if idx is None:
+        G_list = []; labels_list = []
+        for i in range(10):
+            net = pickle.load(open('data/gnn-explainer-enron/enron_slice_{}.pkl'.format(i), 'rb'))
+            #net.add_nodes_from(range(max_enron_id))
+            #labels=[n[1].get('role', 'None') for n in net.nodes(data=True)]
+            #labels_num = [labels_dict[l] for l in labels]
+            featgen_const = featgen.ConstFeatureGen(np.ones(args.input_dim, dtype=float))
+            featgen_const.gen_node_features(net)
+            G_list.append(net)
+            print(net.number_of_nodes())
+            #labels_list.append(labels_num)
 
-    
+        G = nx.disjoint_union_all(G_list)
+        model = models.GcnEncoderNode(args.input_dim, args.hidden_dim, args.output_dim,
+                                      len(labels_dict), args.num_gc_layers, bn=args.bn, args=args)
+        labels=[n[1].get('role', 'None') for n in G.nodes(data=True)]
+        labels_num = [labels_dict[l] for l in labels]
+        for i in range(5):
+            print('Label ', i, ': ', labels_num.count(i))
+
+        print('Total num nodes: ', len(labels_num))
+        print(labels_num)
+
+        if args.gpu:
+            model = model.cuda()
+        train_node_classifier(G, labels_num, model, args, writer=writer)
+    else:
+        print("Running Enron full task")
+   
 
 def benchmark_task(args, writer=None, feat='node-label'):
     graphs = load_data.read_graphfile(args.datadir, args.bmname, max_nodes=args.max_nodes)
