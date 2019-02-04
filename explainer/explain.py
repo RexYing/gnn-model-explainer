@@ -179,7 +179,7 @@ class Explainer:
             adj_grad = torch.abs(explainer.adj_feat_grad(node_idx_new, pred_label[node_idx_new])[0])[graph_idx]
             masked_adj = (adj_grad + adj_grad.t())
             masked_adj = nn.functional.sigmoid(masked_adj)
-            masked_adj = masked_adj.cpu().detach().numpy()
+            masked_adj = masked_adj.cpu().detach().numpy()*sub_adj.squeeze()
 
         else:
             explainer.train()
@@ -215,10 +215,10 @@ class Explainer:
 
             print('finished training in ', time.time() - begin_time)
             if model =='exp':
-                masked_adj = explainer.masked_adj[0].cpu().detach().numpy()
+                masked_adj = explainer.masked_adj[0].cpu().detach().numpy()*sub_adj.squeeze()
             else:
                 adj_att = nn.functional.sigmoid(adj_att).squeeze()
-                masked_adj = adj_att.cpu().detach().numpy()
+                masked_adj = adj_att.cpu().detach().numpy()*sub_adj.squeeze()
                 # pdb.set_trace()
 
 
