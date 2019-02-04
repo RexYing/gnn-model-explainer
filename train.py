@@ -42,7 +42,7 @@ def evaluate(dataset, model, args, name='Validation', max_num_examples=None):
         batch_num_nodes = data['num_nodes'].int().numpy()
         assign_input = Variable(data['assign_feats'].float(), requires_grad=False).cuda()
 
-        ypred = model(h0, adj, batch_num_nodes, assign_x=assign_input)
+        epred = model(h0, adj, batch_num_nodes, assign_x=assign_input)
         _, indices = torch.max(ypred, 1)
         preds.append(indices.cpu().data.numpy())
 
@@ -62,12 +62,15 @@ def evaluate(dataset, model, args, name='Validation', max_num_examples=None):
 def evaluate_node(ypred, labels, train_idx, test_idx):
     _, pred_labels = torch.max(ypred, 2)
     pred_labels = pred_labels.numpy()
-
+    
     pred_train = np.ravel(pred_labels[:, train_idx])
     pred_test = np.ravel(pred_labels[:, test_idx])
     labels_train = np.ravel(labels[:, train_idx])
     labels_test = np.ravel(labels[:, test_idx])
-
+    #pred_train = np.ravel([pred_labels[i, train_idx[i]] for i in range(10)])
+    #pred_test = np.ravel([pred_labels[i, test_idx[i]] for i in range(10)])
+    #labels_train = np.ravel([labels[i, train_idx[i]] for i in range(10)])
+    #labels_test = np.ravel([labels[i, test_idx[i]] for i in range(10)])
     result_train = {'prec': metrics.precision_score(labels_train, pred_train, average='macro'),
               'recall': metrics.recall_score(labels_train, pred_train, average='macro'),
               'acc': metrics.accuracy_score(labels_train, pred_train),
@@ -306,7 +309,6 @@ def train_node_classifier(G, labels, model, args, writer=None):
     labels_train = torch.tensor(data['labels'][:,train_idx], dtype=torch.long)
     adj = torch.tensor(data['adj'], dtype=torch.float)
     x = torch.tensor(data['feat'], requires_grad=True, dtype=torch.float)
-    print(labels_train.shape, adj.shape, x.shape)
     scheduler, optimizer = train_utils.build_optimizer(args, model.parameters(),
             weight_decay=args.weight_decay)
     model.train()
@@ -320,7 +322,6 @@ def train_node_classifier(G, labels, model, args, writer=None):
         else:
             ypred = model(x, adj)
         ypred_train = ypred[:,train_idx,:]
-        print(ypred_train.shape)
         if args.gpu:
             loss = model.loss(ypred_train, labels_train.cuda())
         else:
@@ -384,7 +385,6 @@ def train_node_classifier_multigraph(G_list, labels, model, args, writer=None):
       test_idx = idx[num_train:]; test_idx_all.append(test_idx)
       data = gengraph.preprocess_input_graph(G_list[i], labels[i])
       all_labels = np.concatenate((all_labels, data['labels']), axis=0)
-
       labels_train = torch.cat([labels_train, torch.tensor(data['labels'][:, train_idx], dtype=torch.long)], dim=0)
       adj = torch.cat([adj, torch.tensor(data['adj'], dtype=torch.float)])
       x = torch.cat([x, torch.tensor(data['feat'], requires_grad = True, dtype=torch.float)])
@@ -401,11 +401,15 @@ def train_node_classifier_multigraph(G_list, labels, model, args, writer=None):
             ypred = model(x.cuda(), adj.cuda())
         else:
             ypred = model(x, adj)
+        # normal indexing
         ypred_train = ypred[:,train_idx,:]
+        # in multigraph setting we can't directly access all dimensions so we need to gather all the training instances
+        all_train_idx = [item for sublist in train_idx_all for item in sublist]
+        ypred_train_cmp = torch.cat([ypred[i, train_idx_all[i],:] for i in range(10)], dim=0).reshape(10,146,6)
         if args.gpu:
-            loss = model.loss(ypred_train, labels_train.cuda())
+            loss = model.loss(ypred_train_cmp, labels_train.cuda())
         else:
-            loss = model.loss(ypred_train, labels_train)
+            loss = model.loss(ypred_train_cmp, labels_train)
         loss.backward()
         nn.utils.clip_grad_norm(model.parameters(), args.clip)
 
@@ -414,7 +418,7 @@ def train_node_classifier_multigraph(G_list, labels, model, args, writer=None):
             print(param_group['lr'])
         elapsed = time.time() - begin_time
 
-        result_train, result_test = evaluate_node(ypred.cpu(), all_labels, train_idx, test_idx)
+        result_train, result_test = evaluate_node(ypred.cpu(), all_labels, train_idx_all, test_idx_all)
         if writer is not None:
             writer.add_scalar('loss/avg_loss', loss, epoch)
             writer.add_scalars('prec', {'train': result_train['prec'], 'test': result_test['prec']}, epoch)
@@ -610,7 +614,7 @@ def enron_task(args, idx=None, writer=None):
       #train_dataset, test_dataset, max_num_nodes = prepare_data(G_list, args)
       model = models.GcnEncoderNode(args.input_dim, args.hidden_dim, args.output_dim, args.num_classes,
                                     args.num_gc_layers, bn=args.bn, args=args)
-      if args.cuda:
+      if args.gpu:
         model = model.cuda()
       print(labels_num) 
       train_node_classifier_multigraph(G_list, labels_list, model, args, writer=writer)
