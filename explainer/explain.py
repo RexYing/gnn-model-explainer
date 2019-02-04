@@ -202,14 +202,14 @@ class Explainer:
                           '; pred: ', ypred)
 
                 single_subgraph_label = sub_label.squeeze()
-                # if self.writer is not None:
-                #     self.writer.add_scalar('mask/density', mask_density, epoch)
-                #     self.writer.add_scalar('optimization/lr', explainer.optimizer.param_groups[0]['lr'], epoch)
-                #     if epoch % 100 == 0:
-                #         explainer.log_mask(epoch)
-                #         explainer.log_masked_adj(node_idx_new, epoch, label=single_subgraph_label)
-                #         explainer.log_adj_grad(node_idx_new, pred_label, epoch,
-                #                 label=single_subgraph_label)
+                if self.writer is not None:
+                    self.writer.add_scalar('mask/density', mask_density, epoch)
+                    self.writer.add_scalar('optimization/lr', explainer.optimizer.param_groups[0]['lr'], epoch)
+                    if epoch % 50 == 0:
+                        explainer.log_mask(epoch)
+                        explainer.log_masked_adj(node_idx_new, epoch, label=single_subgraph_label)
+                        explainer.log_adj_grad(node_idx_new, pred_label, epoch,
+                                label=single_subgraph_label)
                 if model != 'exp':
                     break
 
@@ -656,7 +656,7 @@ class ExplainModule(nn.Module):
 
         self.scheduler, self.optimizer = train_utils.build_optimizer(args, params)
 
-        self.coeffs = {'size': 0.001, 'feat_size': 1.0, 'ent': 1.0,
+        self.coeffs = {'size': 0.005, 'feat_size': 1.0, 'ent': 1.0,
                 'feat_ent':0.1, 'grad': 0, 'lap': 1.0}
 
         # ypred = self.model(x, adj)[graph_idx][node_idx]
