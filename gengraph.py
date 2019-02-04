@@ -159,11 +159,34 @@ def gen_syn4(nb_shapes = 60, width_basis = 8, feature_generator=None, m=5):
 
     name = basis_type + '_' + str(width_basis) + '_' + str(nb_shapes)
 
-    path = os.path.join('path/syn4_base_h20_o20')
+    path = os.path.join('log/syn4_base_h20_o20')
     writer = SummaryWriter(path)
     io_utils.log_graph(writer, G, 'graph/full')
 
     return G, role_id, name
+
+def gen_syn5(nb_shapes = 80, width_basis = 8, feature_generator=None, m=3):
+    basis_type='tree'
+    list_shapes = [['grid', m]] * nb_shapes
+    fig = plt.figure(figsize=(8,6), dpi=300)
+
+    G, role_id, plugins = synthetic_structsim.build_graph(width_basis, basis_type, list_shapes,
+            start=0)
+    G = perturb_new([G], 0.1)[0]
+
+    if feature_generator is None:
+        feature_generator = featgen.ConstFeatureGen(1)
+    feature_generator.gen_node_features(G)
+
+    name = basis_type + '_' + str(width_basis) + '_' + str(nb_shapes)
+
+    path = os.path.join('log/syn5_base_h20_o20')
+    writer = SummaryWriter(path)
+    #io_utils.log_graph(writer, G, 'graph/full')
+
+    return G, role_id, name
+
+
 
 def preprocess_input_graph(G, labels, normalize_adj=False):
     adj = np.array(nx.to_numpy_matrix(G))

@@ -178,9 +178,10 @@ def house(start, role_start=0):
 def grid(start, dim=2, role_start=0):
     ''' Builds a 2by2 grid)
     '''
-    grid_G = nx.grid_graph(dim)
-    roles = [1 for i in grid_G.nodes()]
-    return graph, roles
+    grid_G = nx.grid_graph([dim, dim])
+    grid_G = nx.convert_node_labels_to_integers(grid_G, first_label=start)
+    roles = [role_start for i in grid_G.nodes()]
+    return grid_G, roles
 
 def star(start, nb_branches, role_start=0):
     '''Builds a star graph, with index of nodes starting at start

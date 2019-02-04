@@ -96,6 +96,7 @@ class Explainer:
         self.model.train()
         self.model.zero_grad()
         adj = torch.tensor(self.adj, dtype=torch.float)
+        print(adj.size())
         x = torch.tensor(self.feat, requires_grad=True, dtype=torch.float)
         label = torch.tensor(self.label, dtype=torch.long)
         if self.args.gpu:
