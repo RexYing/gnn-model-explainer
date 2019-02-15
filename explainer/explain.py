@@ -172,14 +172,14 @@ class Explainer:
 
         self.model.eval()
 
-
+        # gradient baseline
         if model=='grad':
             explainer.zero_grad()
             # pdb.set_trace()
             adj_grad = torch.abs(explainer.adj_feat_grad(node_idx_new, pred_label[node_idx_new])[0])[graph_idx]
             masked_adj = (adj_grad + adj_grad.t())
             masked_adj = nn.functional.sigmoid(masked_adj)
-            masked_adj = masked_adj.cpu().detach().numpy()
+            masked_adj = masked_adj.cpu().detach().numpy()*sub_adj.squeeze()
 
         else:
             explainer.train()
@@ -202,6 +202,7 @@ class Explainer:
                           '; pred: ', ypred)
 
                 single_subgraph_label = sub_label.squeeze()
+
                 if self.writer is not None:
                     self.writer.add_scalar('mask/density', mask_density, epoch)
                     self.writer.add_scalar('optimization/lr', explainer.optimizer.param_groups[0]['lr'], epoch)
@@ -210,17 +211,16 @@ class Explainer:
                         explainer.log_masked_adj(node_idx_new, epoch, label=single_subgraph_label)
                         explainer.log_adj_grad(node_idx_new, pred_label, epoch,
                                 label=single_subgraph_label)
+
                 if model != 'exp':
                     break
 
             print('finished training in ', time.time() - begin_time)
             if model =='exp':
-                masked_adj = explainer.masked_adj[0].cpu().detach().numpy()
+                masked_adj = explainer.masked_adj[0].cpu().detach().numpy()*sub_adj.squeeze()
             else:
                 adj_att = nn.functional.sigmoid(adj_att).squeeze()
-                masked_adj = adj_att.cpu().detach().numpy()
-                # pdb.set_trace()
-
+                masked_adj = adj_att.cpu().detach().numpy()*sub_adj.squeeze()
 
         return masked_adj
 
@@ -410,7 +410,7 @@ class Explainer:
         real_all = []
         for i,idx in enumerate(node_indices):
             new_idx, _, feat, _, _ = self.extract_neighborhood(idx)
-            G = io_utils.denoise_graph(masked_adjs[i], new_idx, feat, threshold=0.1)
+            G = io_utils.denoise_graph(masked_adjs[i], new_idx, feat,threshold_num=20)
             pred,real = self.make_pred_real(masked_adjs[i],new_idx)
             pred_all.append(pred)
             real_all.append(real)
@@ -419,7 +419,22 @@ class Explainer:
             graphs.append(G)
             feats.append(denoised_feat)
             adjs.append(denoised_adj)
+            io_utils.log_graph(self.writer, G,
+                               'graph/{}_{}_{}'.format(self.args.dataset,model,i), identify_self=True)
 
+        pred_all = np.concatenate((pred_all),axis=0)
+        real_all = np.concatenate((real_all),axis=0)
+
+        auc_all = roc_auc_score(real_all,pred_all)
+        precision, recall, thresholds = precision_recall_curve(real_all,pred_all)
+
+        plt.switch_backend('agg')
+        plt.plot(recall, precision)
+        plt.savefig('log/pr/pr_'+self.args.dataset+'_'+model+'.png')
+
+        plt.close()
+
+        # plot PR
         pred_all = np.concatenate((pred_all),axis=0)
         real_all = np.concatenate((real_all),axis=0)
 
@@ -434,8 +449,6 @@ class Explainer:
 
         with open('log/pr/auc_'+self.args.dataset+'_'+model+'.txt', 'w') as f:
             f.write('dataset: {}, model: {}, auc: {}\n'.format(self.args.dataset, 'exp', str(auc_all)))
-
-
 
         return masked_adjs
 
