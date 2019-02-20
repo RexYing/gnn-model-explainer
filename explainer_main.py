@@ -89,7 +89,7 @@ def arg_parse():
                         lr=0.1,
                         clip=2.0,
                         batch_size=20,
-                        num_epochs=1000,
+                        num_epochs=500,
                         hidden_dim=20,
                         output_dim=20,
                         num_gc_layers=3,

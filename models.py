@@ -240,7 +240,7 @@ class GcnEncoderGraph(nn.Module):
             self.embedding_mask = None
 
         # conv
-        x = self.conv_first(x, adj)
+        x, adj_att = self.conv_first(x, adj)
         x = self.act(x)
         if self.bn:
             x = self.apply_bn(x)
@@ -248,7 +248,7 @@ class GcnEncoderGraph(nn.Module):
         out, _ = torch.max(x, dim=1)
         out_all.append(out)
         for i in range(self.num_layers-2):
-            x = self.conv_block[i](x,adj)
+            x, adj_att = self.conv_block[i](x,adj)
             x = self.act(x)
             if self.bn:
                 x = self.apply_bn(x)
@@ -257,7 +257,7 @@ class GcnEncoderGraph(nn.Module):
             if self.num_aggs == 2:
                 out = torch.sum(x, dim=1)
                 out_all.append(out)
-        x = self.conv_last(x,adj)
+        x, adj_att = self.conv_last(x,adj)
         #x = self.act(x)
         out, _ = torch.max(x, dim=1)
         out_all.append(out)
@@ -271,7 +271,7 @@ class GcnEncoderGraph(nn.Module):
         self.embedding_tensor = output
         ypred = self.pred_model(output)
         #print(output.size())
-        return ypred
+        return ypred, adj
 
     def loss(self, pred, label, type='softmax'):
         # softmax + CE

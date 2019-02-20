@@ -74,7 +74,7 @@ def log_matrix(writer, mat, name, epoch, fig_size=(8,6), dpi=200):
     fig.canvas.draw()
     writer.add_image(name, tensorboardX.utils.figure_to_image(fig), epoch)
 
-def denoise_graph(adj, node_idx, feat=None, label=None, threshold=0.1, threshold_num=12):
+def denoise_graph(adj, node_idx, feat=None, label=None, threshold=0.1, threshold_num=None):
     num_nodes = adj.shape[-1]
     G = nx.Graph()
     G.add_nodes_from(range(num_nodes))
@@ -151,7 +151,7 @@ def log_graph(writer, Gc, name, identify_self=True, nodecolor='label', epoch=0, 
     #pos_layout = nx.kamada_kawai_layout(Gc)
     pos_layout = nx.spring_layout(Gc)
 
-    nx.draw(Gc, pos=nx.kamada_kawai_layout(Gc), with_labels=False, font_size=4, labels=feat_labels,
+    nx.draw(Gc, pos=pos_layout, with_labels=False, font_size=4, labels=feat_labels,
             node_color=node_colors, vmin=0, vmax=vmax, cmap=cmap,
             edge_color=edge_colors, edge_cmap=plt.get_cmap('Greys'), 
             edge_vmin=0.0,
