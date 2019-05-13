@@ -66,9 +66,27 @@ def read_graphfile(datadir, dataname, max_nodes=None):
 
     label_map_to_int = {val:i for i, val in enumerate(label_vals)}
     graph_labels = np.array([label_map_to_int[l] for l in graph_labels])
+
+    # For Tox21_AHR we want to know edge labels 
+    filename_edges = prefix + '_edge_labels.txt'
+    edge_labels = []
+
+    edge_label_vals = []
+    with open(filename_edges) as f:
+        for line in f:
+            line=line.strip("\n")
+            val = int(line)
+            if val not in edge_label_vals:
+                edge_label_vals.append(val)
+            edge_labels.append(val)
+
+    edge_label_map_to_int = {val:i for i, val in enumerate(edge_label_vals)}
     
+
+
     filename_adj=prefix + '_A.txt'
     adj_list={i:[] for i in range(1,len(graph_labels)+1)}    
+    edge_label_list={i:[] for i in range(1,len(graph_labels)+1)}
     index_graph={i:[] for i in range(1,len(graph_labels)+1)}
     num_edges = 0
     with open(filename_adj) as f:
@@ -77,6 +95,7 @@ def read_graphfile(datadir, dataname, max_nodes=None):
             e0,e1=(int(line[0].strip(" ")),int(line[1].strip(" ")))
             adj_list[graph_indic[e0]].append((e0,e1))
             index_graph[graph_indic[e0]]+=[e0,e1]
+            edge_label_list[graph_indic[e0]].append(edge_labels[num_edges])
             num_edges += 1
     for k in index_graph.keys():
         index_graph[k]=[u-1 for u in set(index_graph[k])]
@@ -85,11 +104,17 @@ def read_graphfile(datadir, dataname, max_nodes=None):
     for i in range(1,1+len(adj_list)):
         # indexed from 1 here
         G=nx.from_edgelist(adj_list[i])
+        
         if max_nodes is not None and G.number_of_nodes() > max_nodes:
             continue
       
         # add features and labels
         G.graph['label'] = graph_labels[i-1]
+        
+        # Special label for aromaticity experiment
+        aromatic_edge = 2
+        G.graph['aromatic'] = aromatic_edge in edge_label_list[i]
+
         for u in G.nodes():
             if len(node_labels) > 0:
                 node_label_one_hot = [0] * num_unique_node_labels
