@@ -7,6 +7,7 @@ import argparse
 import os
 import pickle
 import shutil
+import torch
 
 import utils.io_utils as io_utils
 import utils.parser_utils as parser_utils
@@ -79,6 +80,8 @@ def arg_parse():
             help='Method. Possible values: base, att')
     parser.add_argument('--name-suffix', dest='name_suffix',
             help='suffix added to the output filename')
+    parser.add_argument('--explainer-suffix', dest='explainer_suffix',
+            help='suffix added to the explainer log')
 
     parser.set_defaults(logdir='log',
                         ckptdir='ckpt',
@@ -96,6 +99,7 @@ def arg_parse():
                         dropout=0.0,
                         method='base',
                         name_suffix='',
+                        explainer_suffix='',
                         align_steps=1000,
                         explain_node=None,
                         graph_idx=-1,
@@ -140,12 +144,15 @@ def main():
           model = models.GcnEncoderGraph(input_dim, prog_args.hidden_dim, prog_args.output_dim, num_classes,
                                        prog_args.num_gc_layers, bn=prog_args.bn, args=prog_args)
         else:
+          if prog_args.dataset == 'ppi_essential':
+              prog_args.loss_weight = torch.tensor([1, 5.], dtype=torch.float).cuda()
           model = models.GcnEncoderNode(input_dim, prog_args.hidden_dim, prog_args.output_dim, num_classes,
                                        prog_args.num_gc_layers, bn=prog_args.bn, args=prog_args)
         if prog_args.gpu:
             model = model.cuda()
         model.load_state_dict(ckpt['model_state'])
 
+        print('loaded adj: ', cg_dict['adj'])
         explainer = explain.Explainer(model, cg_dict['adj'], cg_dict['feat'],
                                       cg_dict['label'], cg_dict['pred'], cg_dict['train_idx'],
                                       prog_args, writer=writer, print_training=True, graph_mode=graph_mode, 
@@ -162,7 +169,7 @@ def main():
                 for i, l in enumerate(labels):
                     if l == prog_args.multigraph_class:
                         graph_indices.append(i)
-                    if len(graph_indices) > 3:
+                    if len(graph_indices) > 19:
                         break
                 print('Graph indices for label ', prog_args.multigraph_class, ' : ', graph_indices)
                 explainer.explain_graphs(graph_indices=graph_indices)

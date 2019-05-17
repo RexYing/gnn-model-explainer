@@ -1,4 +1,5 @@
 import os
+import statistics
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -22,7 +23,9 @@ def gen_prefix(args):
     return name
 
 def gen_explainer_prefix(args):
-    name = gen_prefix(args) + '_explain'
+    name = gen_prefix(args) + '_explain' 
+    if len(args.explainer_suffix) > 0:
+        name += '_' + args.explainer_suffix
     return name
 
 def create_filename(save_dir, args, isbest=False, num_epochs=-1):
@@ -55,6 +58,7 @@ def save_checkpoint(model, optimizer, args, num_epochs=-1, isbest=False, cg_dict
 def load_ckpt(args, isbest=False):
     print('loading model')
     filename = create_filename(args.ckptdir, args, isbest)
+    print(filename)
     if os.path.isfile(filename):
         print("=> loading checkpoint '{}'".format(filename))
         ckpt = torch.load(filename)
@@ -74,7 +78,8 @@ def log_matrix(writer, mat, name, epoch, fig_size=(8,6), dpi=200):
     fig.canvas.draw()
     writer.add_image(name, tensorboardX.utils.figure_to_image(fig), epoch)
 
-def denoise_graph(adj, node_idx, feat=None, label=None, threshold=0.1, threshold_num=None):
+def denoise_graph(adj, node_idx, feat=None, label=None, threshold=0.1, threshold_num=None,
+        max_component=True):
     num_nodes = adj.shape[-1]
     G = nx.Graph()
     G.add_nodes_from(range(num_nodes))
@@ -90,14 +95,22 @@ def denoise_graph(adj, node_idx, feat=None, label=None, threshold=0.1, threshold
     if threshold_num is not None:
         adj += np.random.rand(adj.shape[0],adj.shape[1])*1e-4
         threshold = np.sort(adj[adj>0])[-threshold_num]
-    weighted_edge_list = [(i, j, adj[i, j]) for i in range(num_nodes) for j in range(num_nodes) if
-            adj[i,j] >= threshold]
+    if threshold is not None:
+        weighted_edge_list = [(i, j, adj[i, j]) for i in range(num_nodes) for j in range(num_nodes) if
+                adj[i,j] >= threshold]
+    else:
+        weighted_edge_list = [(i, j, adj[i, j]) for i in range(num_nodes) for j in range(num_nodes)
+                if adj[i,j] > 1e-6]
     G.add_weighted_edges_from(weighted_edge_list)
-    Gc = max(nx.connected_component_subgraphs(G), key=len) 
-    return Gc
+    if max_component:
+        G = max(nx.connected_component_subgraphs(G), key=len) 
+    else:
+        # remove zero degree nodes
+        G.remove_nodes_from(list(nx.isolates(G)))
+    return G
 
 def log_graph(writer, Gc, name, identify_self=True, nodecolor='label', epoch=0, fig_size=(4,3),
-        dpi=300, label_node_feat=False, edge_vmax=1.0, args=None):
+        dpi=300, label_node_feat=False, edge_vmax=None, args=None):
     '''
     Args:
         nodecolor: the color of node, can be determined by 'label', or 'feat'. For feat, it needs to
@@ -151,6 +164,8 @@ def log_graph(writer, Gc, name, identify_self=True, nodecolor='label', epoch=0, 
     #pos_layout = nx.kamada_kawai_layout(Gc)
     pos_layout = nx.spring_layout(Gc)
 
+    if edge_vmax is None:
+        edge_vmax = statistics.median_high([d['weight'] for (u, v, d) in Gc.edges(data=True)])
     nx.draw(Gc, pos=pos_layout, with_labels=False, font_size=4, labels=feat_labels,
             node_color=node_colors, vmin=0, vmax=vmax, cmap=cmap,
             edge_color=edge_colors, edge_cmap=plt.get_cmap('Greys'), 
@@ -204,4 +219,13 @@ def plot_cmap_tb(writer, cmap, ncolor, name):
     fig = plot_cmap(cmap, ncolor)
     img = tensorboardX.utils.figure_to_image(fig)
     writer.add_image(name, img, 0)
-
+ 
+def sparse_mx_to_torch_sparse_tensor(sparse_mx):
+    """Convert a scipy sparse matrix to a torch sparse tensor."""
+    sparse_mx = sparse_mx.tocoo().astype(np.float32)
+    indices = torch.from_numpy(
+            np.vstack((sparse_mx.row, sparse_mx.col)).astype(np.int64))
+    values = torch.from_numpy(sparse_mx.data)
+    shape = torch.Size(sparse_mx.shape)
+    return torch.sparse.FloatTensor(indices, values, shape)
+ 

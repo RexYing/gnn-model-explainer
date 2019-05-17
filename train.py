@@ -42,7 +42,7 @@ def evaluate(dataset, model, args, name='Validation', max_num_examples=None):
         batch_num_nodes = data['num_nodes'].int().numpy()
         assign_input = Variable(data['assign_feats'].float(), requires_grad=False).cuda()
 
-        epred = model(h0, adj, batch_num_nodes, assign_x=assign_input)
+        ypred, att_adj = model(h0, adj, batch_num_nodes, assign_x=assign_input)
         _, indices = torch.max(ypred, 1)
         preds.append(indices.cpu().data.numpy())
 
@@ -203,7 +203,7 @@ def train(dataset, model, args, same_feat=True, val_dataset=None, test_dataset=N
             if batch_idx==0:
               prev_adjs = data['adj']; prev_feats = data['feats']; prev_labels = data['label']
               all_adjs = prev_adjs   ; all_feats = prev_feats    ; all_labels = prev_labels
-            elif batch_idx < 5:
+            elif batch_idx < 20:
               prev_adjs   = data['adj']
               prev_feats  = data['feats']
               prev_labels = data['label']
@@ -216,7 +216,7 @@ def train(dataset, model, args, same_feat=True, val_dataset=None, test_dataset=N
             batch_num_nodes = data['num_nodes'].int().numpy() if mask_nodes else None
             assign_input = Variable(data['assign_feats'].float(), requires_grad=False).cuda()
 
-            ypred = model(h0, adj, batch_num_nodes, assign_x=assign_input)
+            ypred, att_adj = model(h0, adj, batch_num_nodes, assign_x=assign_input)
             if batch_idx < 5:
               predictions += ypred.cpu().detach().numpy().tolist()
             
@@ -343,6 +343,7 @@ def train_node_classifier(G, labels, model, args, writer=None):
 
         print('epoch: ', epoch, '; loss: ', loss.item(),
               '; train_acc: ', result_train['acc'], '; test_acc: ', result_test['acc'],
+              '; train_prec: ', result_train['prec'], '; test_prec: ', result_test['prec'],
               '; epoch time: ', '{0:0.2f}'.format(elapsed))
 
         if scheduler is not None:
@@ -500,6 +501,27 @@ def prepare_data(graphs, args, test_graphs=None, max_nodes=0):
 
     return train_dataset_loader, val_dataset_loader, test_dataset_loader, \
             dataset_sampler.max_num_nodes, dataset_sampler.feat_dim, dataset_sampler.assign_feat_dim
+
+def ppi_essential_task(args, writer=None):
+    feat_file = 'G-MtfPathways_gene-motifs.csv'
+    G = load_data.read_biosnap('data/ppi_essential', 'PP-Pathways_ppi.csv', 'G-HumanEssential.tsv',
+            feat_file=feat_file)
+    labels = np.array([G.node[u]['label'] for u in G.nodes()])
+    num_classes = max(labels)+1
+    input_dim = G.node[next(iter(G.nodes()))]['feat'].shape[0]
+
+    if args.method == 'attn':
+        print('Method: attn')
+    else:
+        print('Method:', args.method)
+        args.loss_weight = torch.tensor([1, 5.], dtype=torch.float).cuda()
+        model = models.GcnEncoderNode(input_dim, args.hidden_dim, args.output_dim, num_classes,
+                                       args.num_gc_layers, bn=args.bn, args=args)
+        if args.gpu:
+            model = model.cuda()
+
+    train_node_classifier(G, labels, model, args, writer=writer)
+
 
 def syn_task1(args, writer=None):
     # data
@@ -899,6 +921,8 @@ def main():
             syn_task5(prog_args, writer=writer)
         elif prog_args.dataset == 'enron':
             enron_task(prog_args, writer=writer)
+        elif prog_args.dataset == 'ppi_essential':
+            ppi_essential_task(prog_args, writer=writer)
 
 
     writer.close()

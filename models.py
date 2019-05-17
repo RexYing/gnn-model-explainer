@@ -130,6 +130,8 @@ class GcnEncoderGraph(nn.Module):
         if args is not None:
             self.bias = args.bias
 
+
+
         self.conv_first, self.conv_block, self.conv_last = self.build_conv_layers(
                 input_dim, hidden_dim, embedding_dim, num_layers, 
                 add_self, normalize=True, dropout=dropout)
@@ -208,11 +210,12 @@ class GcnEncoderGraph(nn.Module):
             The embedding dim is self.pred_input_dim
         '''
 
-        x,_ = conv_first(x, adj)
+        x, adj_att = conv_first(x, adj)
         x = self.act(x)
         if self.bn:
             x = self.apply_bn(x)
         x_all = [x]
+        adj_att_all = [adj_att]
         #out_all = []
         #out, _ = torch.max(x, dim=1)
         #out_all.append(out)
@@ -222,14 +225,19 @@ class GcnEncoderGraph(nn.Module):
             if self.bn:
                 x = self.apply_bn(x)
             x_all.append(x)
+            adj_att_all.append(adj_att)
         x,adj_att = conv_last(x,adj)
         x_all.append(x)
+        adj_att_all.append(adj_att)
         # x_tensor: [batch_size x num_nodes x embedding]
         x_tensor = torch.cat(x_all, dim=2)
         if embedding_mask is not None:
             x_tensor = x_tensor * embedding_mask
         self.embedding_tensor = x_tensor
-        return x_tensor, adj_att
+
+        # adj_att_tensor: [batch_size x num_nodes x num_nodes x num_gc_layers]
+        adj_att_tensor = torch.stack(adj_att_all, dim=3)
+        return x_tensor, adj_att_tensor
 
     def forward(self, x, adj, batch_num_nodes=None, **kwargs):
         # mask
@@ -247,6 +255,7 @@ class GcnEncoderGraph(nn.Module):
         out_all = []
         out, _ = torch.max(x, dim=1)
         out_all.append(out)
+        adj_att_all = [adj_att]
         for i in range(self.num_layers-2):
             x, adj_att = self.conv_block[i](x,adj)
             x = self.act(x)
@@ -257,7 +266,9 @@ class GcnEncoderGraph(nn.Module):
             if self.num_aggs == 2:
                 out = torch.sum(x, dim=1)
                 out_all.append(out)
+            adj_att_all.append(adj_att)
         x, adj_att = self.conv_last(x,adj)
+        adj_att_all.append(adj_att)
         #x = self.act(x)
         out, _ = torch.max(x, dim=1)
         out_all.append(out)
@@ -268,10 +279,14 @@ class GcnEncoderGraph(nn.Module):
             output = torch.cat(out_all, dim=1)
         else:
             output = out
+
+        # adj_att_tensor: [batch_size x num_nodes x num_nodes x num_gc_layers]
+        adj_att_tensor = torch.stack(adj_att_all, dim=3)
+
         self.embedding_tensor = output
         ypred = self.pred_model(output)
         #print(output.size())
-        return ypred, adj
+        return ypred, adj_att_tensor
 
     def loss(self, pred, label, type='softmax'):
         # softmax + CE
@@ -290,7 +305,11 @@ class GcnEncoderNode(GcnEncoderGraph):
             pred_hidden_dims=[], concat=True, bn=True, dropout=0.0, args=None):
         super(GcnEncoderNode, self).__init__(input_dim, hidden_dim, embedding_dim, label_dim,
                 num_layers, pred_hidden_dims, concat, bn, dropout, args=args)
-        self.celoss = nn.CrossEntropyLoss()
+        if hasattr(args, 'loss_weight'):
+            print('Loss weight: ', args.loss_weight)
+            self.celoss = nn.CrossEntropyLoss(weight=args.loss_weight)
+        else:
+            self.celoss = nn.CrossEntropyLoss()
 
     def forward(self, x, adj, batch_num_nodes=None, **kwargs):
         # mask
