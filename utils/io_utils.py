@@ -161,8 +161,8 @@ def log_graph(writer, Gc, name, identify_self=True, nodecolor='label', epoch=0, 
     plt.switch_backend('agg')
     fig = plt.figure(figsize=fig_size, dpi=dpi)
 
-    #pos_layout = nx.kamada_kawai_layout(Gc)
-    pos_layout = nx.spring_layout(Gc)
+    pos_layout = nx.kamada_kawai_layout(Gc)
+    #pos_layout = nx.spring_layout(Gc)
 
     if edge_vmax is None:
         edge_vmax = statistics.median_high([d['weight'] for (u, v, d) in Gc.edges(data=True)])

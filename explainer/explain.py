@@ -647,6 +647,7 @@ class Explainer:
 class ExplainModule(nn.Module):
     def __init__(self, adj, x, model, label, args, graph_idx=0, writer=None, use_sigmoid=True, graph_mode=False):
         super(ExplainModule, self).__init__()
+        print('Neighborhood size: ', adj.size())
         self.adj = adj
         self.x = x
         self.model = model

@@ -169,7 +169,7 @@ def main():
                 for i, l in enumerate(labels):
                     if l == prog_args.multigraph_class:
                         graph_indices.append(i)
-                    if len(graph_indices) > 19:
+                    if len(graph_indices) > 30:
                         break
                 print('Graph indices for label ', prog_args.multigraph_class, ' : ', graph_indices)
                 explainer.explain_graphs(graph_indices=graph_indices)

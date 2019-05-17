@@ -504,7 +504,9 @@ def prepare_data(graphs, args, test_graphs=None, max_nodes=0):
 
 def ppi_essential_task(args, writer=None):
     feat_file = 'G-MtfPathways_gene-motifs.csv'
-    G = load_data.read_biosnap('data/ppi_essential', 'PP-Pathways_ppi.csv', 'G-HumanEssential.tsv',
+    #G = load_data.read_biosnap('data/ppi_essential', 'PP-Pathways_ppi.csv', 'G-HumanEssential.tsv',
+    #        feat_file=feat_file)
+    G = load_data.read_biosnap('data/ppi_essential', 'hi-union-ppi.tsv', 'G-HumanEssential.tsv',
             feat_file=feat_file)
     labels = np.array([G.node[u]['label'] for u in G.nodes()])
     num_classes = max(labels)+1
