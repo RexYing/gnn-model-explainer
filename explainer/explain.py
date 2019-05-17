@@ -96,7 +96,7 @@ class Explainer:
             power_adj = power_adj @ adj
             hop_adj = hop_adj + power_adj
             hop_adj = (hop_adj > 0).float()
-        return hop_adj.cpu().numpy()
+        return hop_adj.cpu().numpy().astype(int)
 
     def representer(self):
         self.model.train()
