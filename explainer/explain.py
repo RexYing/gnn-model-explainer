@@ -202,8 +202,7 @@ class Explainer:
                 if self.print_training:
                     print('epoch: ', epoch, '; loss: ', loss.item(),
                           '; mask density: ', mask_density.item(),
-                          '; pred: ', ypred)
-
+                          '; pred: ', ypred) 
                 single_subgraph_label = sub_label.squeeze()
 
                 if self.writer is not None:
@@ -220,10 +219,10 @@ class Explainer:
                             # explain node
                             adj_att = torch.sum(adj_atts[graph_idx], dim=2)
                             #adj_att = adj_att[neighbors][:, neighbors]
-                            node_adj_att =  adj_att * adj.float()
+                            node_adj_att =  adj_att * adj.float().cuda()
                             io_utils.log_matrix(self.writer, node_adj_att[graph_idx], 'att/matrix', epoch)
                             node_adj_att = node_adj_att[graph_idx].cpu().detach().numpy()
-                            G = io_utils.denoise_graph(node_adj_att, node_idx_new, threshold_num=25, #threshold=0.1, #threshold_num=20,
+                            G = io_utils.denoise_graph(node_adj_att, node_idx_new, threshold_num=55, #threshold=0.1, #threshold_num=20,
                                     max_component=True)
                             io_utils.log_graph(self.writer, G, name='att/graph', identify_self=True,
                                     nodecolor='label', edge_vmax=None, args=self.args)
@@ -636,27 +635,6 @@ class Explainer:
         self.writer.add_image('local/representer_neigh', tensorboardX.utils.figure_to_image(fig), 0)
 
 
-        #fig = plt.figure(figsize=(4,3), dpi=400)
-        #dat = [[i, rep_val[i], sim_val[i], alpha[i]] for i in range(len(rep_val))]
-        #dat = pd.DataFrame(dat, columns=['idx', 'rep val', 'sim_val', 'alpha'])
-        #sns.barplot(x='idx', y='rep val', data=dat)
-        #fig.axes[0].xaxis.set_visible(False)
-        #fig.canvas.draw()
-        #self.writer.add_image('local/representer_bar', tensorboardX.utils.figure_to_image(fig), 0)
-
-        #fig = plt.figure(figsize=(4,3), dpi=400)
-        #sns.barplot(x='idx', y='alpha', data=dat)
-        #fig.axes[0].xaxis.set_visible(False)
-        #fig.canvas.draw()
-        #self.writer.add_image('local/alpha_bar', tensorboardX.utils.figure_to_image(fig), 0)
-
-        #fig = plt.figure(figsize=(4,3), dpi=400)
-        #sns.barplot(x='idx', y='sim_val', data=dat)
-        #fig.axes[0].xaxis.set_visible(False)
-        #fig.canvas.draw()
-        #self.writer.add_image('local/sim_bar', tensorboardX.utils.figure_to_image(fig), 0)
-
-
 class ExplainModule(nn.Module):
     def __init__(self, adj, x, model, label, args, graph_idx=0, writer=None, use_sigmoid=True, graph_mode=False):
         super(ExplainModule, self).__init__()
@@ -688,7 +666,7 @@ class ExplainModule(nn.Module):
         self.scheduler, self.optimizer = train_utils.build_optimizer(args, params)
 
         self.coeffs = {'size': 0.005, 'feat_size': 1.0, 'ent': 1.0,
-                'feat_ent':0.1, 'grad': 0, 'lap': 1.0}
+                'feat_ent':0.1, 'grad': 0, 'lap': 0.1}
 
         # ypred = self.model(x, adj)[graph_idx][node_idx]
         # print('rerun pred: ', ypred)
@@ -951,8 +929,8 @@ class ExplainModule(nn.Module):
                     label_node_feat=True, nodecolor='feat', edge_vmax=None, args=self.args)
         else:
             #G = io_utils.denoise_graph(adj_grad, node_idx, label=label, threshold=0.5)
-            G = io_utils.denoise_graph(adj_grad, node_idx, threshold_num=25)
-            io_utils.log_graph(self.writer, G, name='grad/graph', epoch=epoch, edge_vmax=0.008,
+            G = io_utils.denoise_graph(adj_grad, node_idx, threshold_num=30)
+            io_utils.log_graph(self.writer, G, name='grad/graph', epoch=epoch,
                     args=self.args)
 
         # if graph attention, also visualize att
@@ -967,7 +945,7 @@ class ExplainModule(nn.Module):
                     nodecolor='feat', epoch=epoch, label_node_feat=True, edge_vmax=None, args=self.args)
         else:
             #G = io_utils.denoise_graph(masked_adj, node_idx, label=label)
-            G = io_utils.denoise_graph(masked_adj, node_idx, threshold_num=20, max_component=True)
+            G = io_utils.denoise_graph(masked_adj, node_idx, threshold_num=40, max_component=True)
             io_utils.log_graph(self.writer, G, name=name, identify_self=True,
                     nodecolor='label', epoch=epoch, edge_vmax=None, args=self.args,
                     )

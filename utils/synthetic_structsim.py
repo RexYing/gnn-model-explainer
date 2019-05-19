@@ -265,7 +265,7 @@ def build_graph(width_basis, basis_type, list_shapes, start=0, rdm_basis_plugins
     if rdm_basis_plugins is True:
         plugins = np.random.choice(n_basis, n_shapes, replace=False)
     else:
-        spacing = math.floor(width_basis / n_shapes)
+        spacing = math.floor(n_basis / n_shapes)
         plugins = [int(k * spacing) for k in range(n_shapes)]
     seen_shapes = {'basis': [0, n_basis]}
     #for p in plugins:

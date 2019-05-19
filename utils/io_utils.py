@@ -163,15 +163,18 @@ def log_graph(writer, Gc, name, identify_self=True, nodecolor='label', epoch=0, 
 
     if Gc.number_of_nodes() == 0:
         raise Exception('empty graph')
+    if Gc.number_of_edges() == 0:
+        raise Exception('empty edge')
     #remove_nodes = []
     #for u in Gc.nodes():
     #    if Gc
     #pos_layout = nx.kamada_kawai_layout(Gc)
     pos_layout = nx.spring_layout(Gc)
 
+    weights = [d for (u, v, d) in Gc.edges(data='weight', default=1) ]
     if edge_vmax is None:
-        edge_vmax = statistics.median_high([d['weight'] for (u, v, d) in Gc.edges(data=True)])
-    edge_vmin = min([d['weight'] for (u, v, d) in Gc.edges(data=True)]) / 1.05
+        edge_vmax = statistics.median_high([d for (u, v, d) in Gc.edges(data='weight', default=1)])
+    edge_vmin = min([d for (u, v, d) in Gc.edges(data='weight', default=1)]) / 1.9
     nx.draw(Gc, pos=pos_layout, with_labels=False, font_size=4, labels=feat_labels,
             node_color=node_colors, vmin=0, vmax=vmax, cmap=cmap,
             edge_color=edge_colors, edge_cmap=plt.get_cmap('Greys'), 
