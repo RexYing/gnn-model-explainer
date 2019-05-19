@@ -319,6 +319,7 @@ class GcnEncoderNode(GcnEncoderGraph):
         else:
             embedding_mask = None
 
+        self.adj_atts = []
         self.embedding_tensor, adj_att = self.gcn_forward(x, adj,
                                             self.conv_first, self.conv_block, self.conv_last, embedding_mask)
         pred = self.pred_model(self.embedding_tensor)

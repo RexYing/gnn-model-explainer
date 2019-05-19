@@ -531,14 +531,16 @@ def syn_task1(args, writer=None):
             feature_generator=featgen.ConstFeatureGen(np.ones(args.input_dim, dtype=float)))
     num_classes = max(labels)+1
 
-    if args.method == 'attn':
-        print('Method: attn')
+    if args.method == 'att':
+        print('Method: att')
+        model = models.GcnEncoderNode(args.input_dim, args.hidden_dim, args.output_dim, num_classes,
+                                       args.num_gc_layers, bn=args.bn, args=args)
     else:
         print('Method:', args.method)
         model = models.GcnEncoderNode(args.input_dim, args.hidden_dim, args.output_dim, num_classes,
                                        args.num_gc_layers, bn=args.bn, args=args)
-        if args.gpu:
-            model = model.cuda()
+    if args.gpu:
+        model = model.cuda()
 
     train_node_classifier(G, labels, model, args, writer=writer)
 

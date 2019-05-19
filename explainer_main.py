@@ -136,78 +136,75 @@ def main():
     graph_mode = prog_args.graph_mode or prog_args.multigraph_class >= 0 or prog_args.graph_idx >= 0
 
     # build model
-    if prog_args.method == 'attn':
-        print('Method: attn')
+    print('Method: ', prog_args.method)
+    if graph_mode:
+      model = models.GcnEncoderGraph(input_dim, prog_args.hidden_dim, prog_args.output_dim, num_classes,
+                                   prog_args.num_gc_layers, bn=prog_args.bn, args=prog_args)
     else:
-        print('Method: base')
-        if graph_mode:
-          model = models.GcnEncoderGraph(input_dim, prog_args.hidden_dim, prog_args.output_dim, num_classes,
-                                       prog_args.num_gc_layers, bn=prog_args.bn, args=prog_args)
+      if prog_args.dataset == 'ppi_essential':
+          prog_args.loss_weight = torch.tensor([1, 5.], dtype=torch.float).cuda()
+      model = models.GcnEncoderNode(input_dim, prog_args.hidden_dim, prog_args.output_dim, num_classes,
+                                   prog_args.num_gc_layers, bn=prog_args.bn, args=prog_args,
+                                   )
+    if prog_args.gpu:
+        model = model.cuda()
+    model.load_state_dict(ckpt['model_state'])
+
+    explainer = explain.Explainer(model, cg_dict['adj'], cg_dict['feat'],
+                                  cg_dict['label'], cg_dict['pred'], cg_dict['train_idx'],
+                                  prog_args, writer=writer, print_training=True, graph_mode=graph_mode, 
+                                  graph_idx=prog_args.graph_idx)
+    train_idx = cg_dict['train_idx']
+    if prog_args.explain_node is not None:
+        explainer.explain(prog_args.explain_node, unconstrained=False)
+    elif graph_mode:
+        if prog_args.multigraph_class >= 0:
+            print(cg_dict['label'])
+            # only run for graphs with label specified by multigraph_class
+            labels = cg_dict['label'].numpy()
+            graph_indices = []
+            for i, l in enumerate(labels):
+                if l == prog_args.multigraph_class:
+                    graph_indices.append(i)
+                if len(graph_indices) > 30:
+                    break
+            print('Graph indices for label ', prog_args.multigraph_class, ' : ', graph_indices)
+            explainer.explain_graphs(graph_indices=graph_indices)
+                
+        elif prog_args.graph_idx == -1:
+            # just run for a customized set of indices
+            explainer.explain_graphs(graph_indices=[1,2,3,4])
         else:
-          if prog_args.dataset == 'ppi_essential':
-              prog_args.loss_weight = torch.tensor([1, 5.], dtype=torch.float).cuda()
-          model = models.GcnEncoderNode(input_dim, prog_args.hidden_dim, prog_args.output_dim, num_classes,
-                                       prog_args.num_gc_layers, bn=prog_args.bn, args=prog_args)
-        if prog_args.gpu:
-            model = model.cuda()
-        model.load_state_dict(ckpt['model_state'])
+            explainer.explain(node_idx=0, graph_idx=prog_args.graph_idx, graph_mode=True, unconstrained=False)
+            io_utils.plot_cmap_tb(writer, 'tab20', 20, 'tab20_cmap')
+    else:
+        if prog_args.multinode_class >= 0:
+            print(cg_dict['label'])
+            # only run for nodes with label specified by multinode_class
+            labels = cg_dict['label'][0]  # already numpy matrix
 
-        print('loaded adj: ', cg_dict['adj'])
-        explainer = explain.Explainer(model, cg_dict['adj'], cg_dict['feat'],
-                                      cg_dict['label'], cg_dict['pred'], cg_dict['train_idx'],
-                                      prog_args, writer=writer, print_training=True, graph_mode=graph_mode, 
-                                      graph_idx=prog_args.graph_idx)
-        train_idx = cg_dict['train_idx']
-        if prog_args.explain_node is not None:
-            explainer.explain(prog_args.explain_node, unconstrained=False)
-        elif graph_mode:
-            if prog_args.multigraph_class >= 0:
-                print(cg_dict['label'])
-                # only run for graphs with label specified by multigraph_class
-                labels = cg_dict['label'].numpy()
-                graph_indices = []
-                for i, l in enumerate(labels):
-                    if l == prog_args.multigraph_class:
-                        graph_indices.append(i)
-                    if len(graph_indices) > 30:
-                        break
-                print('Graph indices for label ', prog_args.multigraph_class, ' : ', graph_indices)
-                explainer.explain_graphs(graph_indices=graph_indices)
-                    
-            elif prog_args.graph_idx == -1:
-                # just run for a customized set of indices
-                explainer.explain_graphs(graph_indices=[1,2,3,4])
-            else:
-                explainer.explain(node_idx=0, graph_idx=prog_args.graph_idx, graph_mode=True, unconstrained=False)
-                io_utils.plot_cmap_tb(writer, 'tab20', 20, 'tab20_cmap')
+            node_indices = []
+            for i, l in enumerate(labels):
+                if len(node_indices) > 4:
+                    break
+                if l == prog_args.multinode_class:
+                    node_indices.append(i)
+            print('Node indices for label ', prog_args.multinode_class, ' : ', node_indices)
+            explainer.explain_nodes(node_indices, prog_args)
+
         else:
-            if prog_args.multinode_class >= 0:
-                print(cg_dict['label'])
-                # only run for nodes with label specified by multinode_class
-                labels = cg_dict['label'][0]  # already numpy matrix
-
-                node_indices = []
-                for i, l in enumerate(labels):
-                    if len(node_indices) > 4:
-                        break
-                    if l == prog_args.multinode_class:
-                        node_indices.append(i)
-                print('Node indices for label ', prog_args.multinode_class, ' : ', node_indices)
-                explainer.explain_nodes(node_indices, prog_args)
-
-            else:
-                # explain a set of nodes
-                # masked_adj = explainer.explain_nodes([370,390], prog_args)
-                # masked_adj = explainer.explain_nodes_gnn_cluster([370,390], prog_args)
-                # masked_adj = explainer.explain_nodes_gnn_cluster(range(400, 700, 5), prog_args)
-                masked_adj = explainer.explain_nodes_gnn_stats(range(400, 700, 5), prog_args)
-                #pickle.dump(masked_adj, open('out/masked_adjs.pkl', 'wb'))
             # explain a set of nodes
             # masked_adj = explainer.explain_nodes([370,390], prog_args)
             # masked_adj = explainer.explain_nodes_gnn_cluster([370,390], prog_args)
             # masked_adj = explainer.explain_nodes_gnn_cluster(range(400, 700, 5), prog_args)
-            # masked_adj = explainer.explain_nodes_gnn_stats(range(511, 811, 6), prog_args)
+            masked_adj = explainer.explain_nodes_gnn_stats(range(400, 700, 5), prog_args)
             #pickle.dump(masked_adj, open('out/masked_adjs.pkl', 'wb'))
+        # explain a set of nodes
+        # masked_adj = explainer.explain_nodes([370,390], prog_args)
+        # masked_adj = explainer.explain_nodes_gnn_cluster([370,390], prog_args)
+        # masked_adj = explainer.explain_nodes_gnn_cluster(range(400, 700, 5), prog_args)
+        # masked_adj = explainer.explain_nodes_gnn_stats(range(511, 811, 6), prog_args)
+        #pickle.dump(masked_adj, open('out/masked_adjs.pkl', 'wb'))
 
 
         

@@ -127,7 +127,7 @@ def gen_syn2(nb_shapes = 100, width_basis = 350):
 
 def gen_syn3(nb_shapes = 80, width_basis = 300, feature_generator=None, m=5):
     basis_type = 'ba'
-    list_shapes = [['cycle', 5]] * nb_shapes
+    list_shapes = [['cycle', 6]] * nb_shapes
 
     fig = plt.figure(figsize=(8,6), dpi=300)
 

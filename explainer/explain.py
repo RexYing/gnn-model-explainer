@@ -94,6 +94,7 @@ class Explainer:
         hop_adj = power_adj = adj
         for i in range(self.n_hops-1):
             power_adj = power_adj @ adj
+            prev_hop_adj = hop_adj
             hop_adj = hop_adj + power_adj
             hop_adj = (hop_adj > 0).float()
         return hop_adj.cpu().numpy().astype(int)
@@ -189,7 +190,7 @@ class Explainer:
             for epoch in range(self.args.num_epochs):
                 explainer.zero_grad()
                 explainer.optimizer.zero_grad()
-                ypred,adj_att = explainer(node_idx_new, unconstrained=unconstrained)
+                ypred,adj_atts = explainer(node_idx_new, unconstrained=unconstrained)
                 loss = explainer.loss(ypred, pred_label, node_idx_new, epoch)
                 loss.backward()
 
@@ -208,12 +209,24 @@ class Explainer:
                 if self.writer is not None:
                     self.writer.add_scalar('mask/density', mask_density, epoch)
                     self.writer.add_scalar('optimization/lr', explainer.optimizer.param_groups[0]['lr'], epoch)
-                    if epoch % 50 == 0:
+                    if epoch % 25 == 0:
                         explainer.log_mask(epoch)
                         explainer.log_masked_adj(node_idx_new, epoch, label=single_subgraph_label)
                         explainer.log_adj_grad(node_idx_new, pred_label, epoch,
                                 label=single_subgraph_label)
 
+                    if epoch == 0:
+                        if self.model.att:
+                            # explain node
+                            adj_att = torch.sum(adj_atts[graph_idx], dim=2)
+                            #adj_att = adj_att[neighbors][:, neighbors]
+                            node_adj_att =  adj_att * adj.float()
+                            io_utils.log_matrix(self.writer, node_adj_att[graph_idx], 'att/matrix', epoch)
+                            node_adj_att = node_adj_att[graph_idx].cpu().detach().numpy()
+                            G = io_utils.denoise_graph(node_adj_att, node_idx_new, threshold_num=25, #threshold=0.1, #threshold_num=20,
+                                    max_component=True)
+                            io_utils.log_graph(self.writer, G, name='att/graph', identify_self=True,
+                                    nodecolor='label', edge_vmax=None, args=self.args)
                 if model != 'exp':
                     break
 
@@ -221,8 +234,8 @@ class Explainer:
             if model =='exp':
                 masked_adj = explainer.masked_adj[0].cpu().detach().numpy()*sub_adj.squeeze()
             else:
-                adj_att = nn.functional.sigmoid(adj_att).squeeze()
-                masked_adj = adj_att.cpu().detach().numpy()*sub_adj.squeeze()
+                adj_atts = nn.functional.sigmoid(adj_atts).squeeze()
+                masked_adj = adj_atts.cpu().detach().numpy()*sub_adj.squeeze()
 
         return masked_adj
 
@@ -932,27 +945,30 @@ class ExplainModule(nn.Module):
         adj_grad = adj_grad.detach().numpy()
         if self.graph_mode:
             print('GRAPH model')
-            G = io_utils.denoise_graph(adj_grad, node_idx, feat=self.x[0], threshold_num=20,
+            G = io_utils.denoise_graph(adj_grad, node_idx, feat=self.x[0], threshold=0.0000035, #threshold_num=20,
                     max_component=False)
             io_utils.log_graph(self.writer, G, name='grad/graph', epoch=epoch, identify_self=False,
                     label_node_feat=True, nodecolor='feat', edge_vmax=None, args=self.args)
         else:
             #G = io_utils.denoise_graph(adj_grad, node_idx, label=label, threshold=0.5)
-            G = io_utils.denoise_graph(adj_grad, node_idx, threshold=0.001)
+            G = io_utils.denoise_graph(adj_grad, node_idx, threshold_num=25)
             io_utils.log_graph(self.writer, G, name='grad/graph', epoch=epoch, edge_vmax=0.008,
                     args=self.args)
+
+        # if graph attention, also visualize att
 
     def log_masked_adj(self, node_idx, epoch, name='mask/graph', label=None):
         # use [0] to remove the batch dim
         masked_adj = self.masked_adj[0].cpu().detach().numpy()
         if self.graph_mode:
-            G = io_utils.denoise_graph(masked_adj, node_idx, feat=self.x[0], threshold_num=20,
+            G = io_utils.denoise_graph(masked_adj, node_idx, feat=self.x[0], threshold=0.047, #threshold_num=20,
                     max_component=False)
             io_utils.log_graph(self.writer, G, name=name, identify_self=False,
                     nodecolor='feat', epoch=epoch, label_node_feat=True, edge_vmax=None, args=self.args)
         else:
             #G = io_utils.denoise_graph(masked_adj, node_idx, label=label)
-            G = io_utils.denoise_graph(masked_adj, node_idx)
+            G = io_utils.denoise_graph(masked_adj, node_idx, threshold_num=20, max_component=True)
             io_utils.log_graph(self.writer, G, name=name, identify_self=True,
-                    nodecolor='label', epoch=epoch, edge_vmax=0.7, args=self.args)
+                    nodecolor='label', epoch=epoch, edge_vmax=None, args=self.args,
+                    )
 

@@ -161,26 +161,34 @@ def log_graph(writer, Gc, name, identify_self=True, nodecolor='label', epoch=0, 
     plt.switch_backend('agg')
     fig = plt.figure(figsize=fig_size, dpi=dpi)
 
-    pos_layout = nx.kamada_kawai_layout(Gc)
-    #pos_layout = nx.spring_layout(Gc)
+    if Gc.number_of_nodes() == 0:
+        raise Exception('empty graph')
+    #remove_nodes = []
+    #for u in Gc.nodes():
+    #    if Gc
+    #pos_layout = nx.kamada_kawai_layout(Gc)
+    pos_layout = nx.spring_layout(Gc)
 
     if edge_vmax is None:
         edge_vmax = statistics.median_high([d['weight'] for (u, v, d) in Gc.edges(data=True)])
+    edge_vmin = min([d['weight'] for (u, v, d) in Gc.edges(data=True)]) / 1.05
     nx.draw(Gc, pos=pos_layout, with_labels=False, font_size=4, labels=feat_labels,
             node_color=node_colors, vmin=0, vmax=vmax, cmap=cmap,
             edge_color=edge_colors, edge_cmap=plt.get_cmap('Greys'), 
-            edge_vmin=0.0,
+            edge_vmin=edge_vmin,
             edge_vmax=edge_vmax,
             width=1.0, node_size=50,
             alpha=0.8)
     fig.axes[0].xaxis.set_visible(False)
     fig.canvas.draw()
-    #plt.savefig('log/' + name+'.png')
+
     if args is None:
-        plt.savefig('log/' + name+'.pdf', format='pdf')
+        save_path = os.path.join('log/', name + '.pdf')
     else:
-        plt.savefig('log/' + name + gen_explainer_prefix(args) + '_' + str(epoch) + '.pdf', format='pdf')
+        save_path = os.path.join('log', name + gen_explainer_prefix(args) + '_' + str(epoch) + '.pdf')
         print('log/' + name + gen_explainer_prefix(args) + '_' + str(epoch) + '.pdf')
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    plt.savefig(save_path, format='pdf')
 
     img = tensorboardX.utils.figure_to_image(fig)
     writer.add_image(name, img, epoch)
