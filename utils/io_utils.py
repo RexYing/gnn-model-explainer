@@ -121,7 +121,8 @@ def log_graph(writer, Gc, name, identify_self=True, nodecolor='label', epoch=0, 
     fig = plt.figure(figsize=fig_size, dpi=dpi)
    
     node_colors = []
-    edge_colors = [min(max(w, 0.0), 1.0) for (u,v,w) in Gc.edges.data('weight', default=1)]
+    #edge_colors = [min(max(w, 0.0), 1.0) for (u,v,w) in Gc.edges.data('weight', default=1)]
+    edge_colors = [w for (u,v,w) in Gc.edges.data('weight', default=1)]
 
     # maximum value for node color
     vmax = 8
@@ -168,13 +169,13 @@ def log_graph(writer, Gc, name, identify_self=True, nodecolor='label', epoch=0, 
     #remove_nodes = []
     #for u in Gc.nodes():
     #    if Gc
-    #pos_layout = nx.kamada_kawai_layout(Gc)
-    pos_layout = nx.spring_layout(Gc)
+    pos_layout = nx.kamada_kawai_layout(Gc)
+    #pos_layout = nx.spring_layout(Gc)
 
     weights = [d for (u, v, d) in Gc.edges(data='weight', default=1) ]
     if edge_vmax is None:
         edge_vmax = statistics.median_high([d for (u, v, d) in Gc.edges(data='weight', default=1)])
-    edge_vmin = min([d for (u, v, d) in Gc.edges(data='weight', default=1)]) / 1.9
+    edge_vmin = min([d for (u, v, d) in Gc.edges(data='weight', default=1)]) / 1.1
     nx.draw(Gc, pos=pos_layout, with_labels=False, font_size=4, labels=feat_labels,
             node_color=node_colors, vmin=0, vmax=vmax, cmap=cmap,
             edge_color=edge_colors, edge_cmap=plt.get_cmap('Greys'), 

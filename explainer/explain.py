@@ -217,14 +217,16 @@ class Explainer:
                     if epoch == 0:
                         if self.model.att:
                             # explain node
-                            adj_att = torch.sum(adj_atts[graph_idx], dim=2)
+                            print('adj att size: ', adj_atts.size())
+                            adj_att = torch.sum(adj_atts[0], dim=2)
                             #adj_att = adj_att[neighbors][:, neighbors]
                             node_adj_att =  adj_att * adj.float().cuda()
-                            io_utils.log_matrix(self.writer, node_adj_att[graph_idx], 'att/matrix', epoch)
-                            node_adj_att = node_adj_att[graph_idx].cpu().detach().numpy()
-                            G = io_utils.denoise_graph(node_adj_att, node_idx_new, threshold_num=55, #threshold=0.1, #threshold_num=20,
+                            io_utils.log_matrix(self.writer, node_adj_att[0], 'att/matrix', epoch)
+                            node_adj_att = node_adj_att[0].cpu().detach().numpy()
+                            G = io_utils.denoise_graph(node_adj_att, node_idx_new, threshold=3.8, #threshold_num=20,
                                     max_component=True)
-                            io_utils.log_graph(self.writer, G, name='att/graph', identify_self=True,
+                            io_utils.log_graph(self.writer, G, name='att/graph',
+                                    identify_self=not self.graph_mode,
                                     nodecolor='label', edge_vmax=None, args=self.args)
                 if model != 'exp':
                     break
@@ -666,7 +668,7 @@ class ExplainModule(nn.Module):
         self.scheduler, self.optimizer = train_utils.build_optimizer(args, params)
 
         self.coeffs = {'size': 0.005, 'feat_size': 1.0, 'ent': 1.0,
-                'feat_ent':0.1, 'grad': 0, 'lap': 0.1}
+                'feat_ent':0.1, 'grad': 0, 'lap': 1.0}
 
         # ypred = self.model(x, adj)[graph_idx][node_idx]
         # print('rerun pred: ', ypred)
@@ -724,7 +726,7 @@ class ExplainModule(nn.Module):
         adj_sum = torch.sum(self.adj)
         return mask_sum / adj_sum
 
-    def forward(self, node_idx, unconstrained=False):
+    def forward(self, node_idx, unconstrained=False, mask_features=True):
         x = self.x.cuda() if self.args.gpu else self.x
 
         if unconstrained:
@@ -732,15 +734,16 @@ class ExplainModule(nn.Module):
             self.masked_adj = torch.unsqueeze((sym_mask + sym_mask.t()) / 2, 0) * self.diag_mask
         else:
             self.masked_adj = self._masked_adj()
-            feat_mask = torch.sigmoid(self.feat_mask) if self.use_sigmoid else self.feat_mask
-            marginalize = False
-            if marginalize:
-                std_tensor = torch.ones_like(x, dtype=torch.float) / 2
-                mean_tensor = torch.zeros_like(x, dtype=torch.float) - x
-                z = torch.normal(mean=mean_tensor, std=std_tensor)
-                x = x + z * (1 - feat_mask)
-            else:
-                x = x * feat_mask
+            if mask_features:
+                feat_mask = torch.sigmoid(self.feat_mask) if self.use_sigmoid else self.feat_mask
+                marginalize = False
+                if marginalize:
+                    std_tensor = torch.ones_like(x, dtype=torch.float) / 2
+                    mean_tensor = torch.zeros_like(x, dtype=torch.float) - x
+                    z = torch.normal(mean=mean_tensor, std=std_tensor)
+                    x = x + z * (1 - feat_mask)
+                else:
+                    x = x * feat_mask
 
         ypred,adj_att = self.model(x, self.masked_adj)
         if self.graph_mode:
@@ -923,8 +926,8 @@ class ExplainModule(nn.Module):
         adj_grad = adj_grad.detach().numpy()
         if self.graph_mode:
             print('GRAPH model')
-            G = io_utils.denoise_graph(adj_grad, node_idx, feat=self.x[0], threshold=0.0000035, #threshold_num=20,
-                    max_component=False)
+            G = io_utils.denoise_graph(adj_grad, node_idx, feat=self.x[0], threshold=0.0003, #threshold_num=20,
+                    max_component=True)
             io_utils.log_graph(self.writer, G, name='grad/graph', epoch=epoch, identify_self=False,
                     label_node_feat=True, nodecolor='feat', edge_vmax=None, args=self.args)
         else:
@@ -939,13 +942,13 @@ class ExplainModule(nn.Module):
         # use [0] to remove the batch dim
         masked_adj = self.masked_adj[0].cpu().detach().numpy()
         if self.graph_mode:
-            G = io_utils.denoise_graph(masked_adj, node_idx, feat=self.x[0], threshold=0.047, #threshold_num=20,
-                    max_component=False)
+            G = io_utils.denoise_graph(masked_adj, node_idx, feat=self.x[0], threshold=0.2, #threshold_num=20,
+                    max_component=True)
             io_utils.log_graph(self.writer, G, name=name, identify_self=False,
                     nodecolor='feat', epoch=epoch, label_node_feat=True, edge_vmax=None, args=self.args)
         else:
             #G = io_utils.denoise_graph(masked_adj, node_idx, label=label)
-            G = io_utils.denoise_graph(masked_adj, node_idx, threshold_num=40, max_component=True)
+            G = io_utils.denoise_graph(masked_adj, node_idx, threshold_num=8, max_component=True)
             io_utils.log_graph(self.writer, G, name=name, identify_self=True,
                     nodecolor='label', epoch=epoch, edge_vmax=None, args=self.args,
                     )
