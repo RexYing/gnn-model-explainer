@@ -44,8 +44,8 @@ def save(mask_cg):
 # 2) Load a query computation graph
 #
 #####
-MODEL_PATH = 'gcn-vanilla.pt'
-CG_PATH = '1.pt'
+MODEL_PATH = "gcn-vanilla.pt"
+CG_PATH = "1.pt"
 model = load_model(MODEL_PATH)
 original_cg = load_cg(CG_PATH)
 
@@ -95,8 +95,11 @@ for i in range(max_iterations):
     perturbed_input = perturbed_input + noise
 
     outputs = torch.nn.Softmax()(model(perturbed_input))
-    loss = l1_coeff * torch.mean(torch.abs(1 - mask)) + \
-           tv_coeff * explain.tv_norm(mask, tv_beta) + outputs[0, category]
+    loss = (
+        l1_coeff * torch.mean(torch.abs(1 - mask))
+        + tv_coeff * explain.tv_norm(mask, tv_beta)
+        + outputs[0, category]
+    )
 
     optimizer.zero_grad()
     loss.backward()
