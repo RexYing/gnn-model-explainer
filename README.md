@@ -24,3 +24,6 @@ See [INSTALLATION.md](#)
 ### Using the explainer on other models
 
 
+## Changelog
+
+See [CHANGELOG.md](#)
