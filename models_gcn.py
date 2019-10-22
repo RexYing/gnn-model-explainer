@@ -26,7 +26,6 @@ class MLP(nn.Module):
                     m.bias.data = init.constant_(m.bias.data, 0.0)
 
     def forward(self, x):
-        # x = F.normalize(x, p=2, dim=-1)
         if self.normalize_input:
             x = (x - torch.mean(x, dim=0)) / torch.std(x, dim=0)
         x = self.act(self.linear_1(x))
@@ -96,8 +95,6 @@ class GraphConv(nn.Module):
                 normalize_input=False,
             )
 
-        # self.W = nn.Parameter(torch.zeros(size=(input_dim, input_dim)))
-        # nn.init.xavier_uniform_(self.W.data, gain=1.414)
         self.softmax = nn.Softmax(dim=-1)
 
     def forward(self, x, adj):
@@ -112,12 +109,10 @@ class GraphConv(nn.Module):
             # pdb.set_trace()
         elif self.mpnn:
             x1 = x.unsqueeze(0).repeat(x.shape[0], 1, 1)
-            # x2 = x1.permute(1,0,2)
             x2 = x.unsqueeze(1).repeat(1, x.shape[0], 1)
             e = torch.cat((x1, x2), dim=-1)
             e = self.mpnn_compute(e)
             pred = torch.mean(adj.unsqueeze(-1) * e, dim=1)
-            # return pred
         else:
             pred = torch.matmul(adj, x)
         # pdb.set_trace()
