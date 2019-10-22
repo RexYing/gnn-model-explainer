@@ -1,5 +1,8 @@
-import torch.optim as optim
+'''train_utils.py
 
+    Some training utilities.
+'''
+import torch.optim as optim
 
 def build_optimizer(args, params, weight_decay=0.0):
     filter_fn = filter(lambda p : p.requires_grad, params)

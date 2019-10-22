@@ -1,6 +1,11 @@
+""" parser_utils.py
+
+    Parsing utilities.
+"""
 import argparse
 
 def parse_optimizer(parser):
+    '''Set optimizer parameters'''
     opt_parser = parser.add_argument_group()
     opt_parser.add_argument('--opt', dest='opt', type=str,
             help='Type of optimizer')
