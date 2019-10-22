@@ -1,13 +1,20 @@
+"""load_data.py
+
+   Utilities for data loading.
+"""
+
+import os
+import re
 import csv
+
 import networkx as nx
 import numpy as np
 import pandas as pd
 import scipy as sc
-import os
-import re
+
 import utils.featgen as featgen
 
-def read_graphfile(datadir, dataname, max_nodes=None, edge_labels=False):
+def read_graphfile(datadir, dataname, max_nodes = None, edge_labels = False):
     ''' Read data from https://ls11-www.cs.tu-dortmund.de/staff/morris/graphkerneldatasets
         graph index starts with 1 in file
 
@@ -30,7 +37,6 @@ def read_graphfile(datadir, dataname, max_nodes=None, edge_labels=False):
     min_label_val = None
     try:
         with open(filename_nodes) as f:
-            has_zero = False
             for line in f:
                 line=line.strip("\n")
                 l = int(line)
@@ -85,8 +91,6 @@ def read_graphfile(datadir, dataname, max_nodes=None, edge_labels=False):
                 edge_labels.append(val)
 
         edge_label_map_to_int = {val:i for i, val in enumerate(edge_label_vals)}
-    
-
 
     filename_adj=prefix + '_A.txt'
     adj_list={i:[] for i in range(1,len(graph_labels)+1)}    
@@ -116,8 +120,8 @@ def read_graphfile(datadir, dataname, max_nodes=None, edge_labels=False):
         G.graph['label'] = graph_labels[i-1]
         
         # Special label for aromaticity experiment
-        #aromatic_edge = 2
-        #G.graph['aromatic'] = aromatic_edge in edge_label_list[i]
+        # aromatic_edge = 2
+        # G.graph['aromatic'] = aromatic_edge in edge_label_list[i]
 
         for u in G.nodes():
             if len(node_labels) > 0:
@@ -148,6 +152,11 @@ def read_graphfile(datadir, dataname, max_nodes=None, edge_labels=False):
 
 
 def read_biosnap(datadir, edgelist_file, label_file, feat_file=None, concat=True):
+    ''' Read data from BioSnap
+
+    Returns:
+        List of networkx objects with graph and node labels
+    '''
     G = nx.Graph()
     delimiter = '\t' if 'tsv' in edgelist_file else ','
     print(delimiter)
@@ -159,9 +168,6 @@ def read_biosnap(datadir, edgelist_file, label_file, feat_file=None, concat=True
     G = max(nx.connected_component_subgraphs(G), key=len)
     print('Total nodes in largest connected component: ', G.number_of_nodes())
 
-
-    #df = pd.read_csv(os.path.join(datadir, label_file), delimiter='\t', usecols=['Gene ID','Essentiality (determined from multiple dataset)'],
-    #        dtype=np.int32)
     df = pd.read_csv(os.path.join(datadir, label_file), delimiter='\t', usecols=[0, 1])
     data = list(map(tuple, df.values.tolist()))
 
