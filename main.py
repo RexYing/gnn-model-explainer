@@ -6,36 +6,10 @@ import numpy as np
 
 from explainer import explain
 
+from utils import math_utils
+from utils import io_utils
+
 use_cuda = torch.cuda.is_available()
-
-
-def load_model(path):
-    model = torch.load(path)
-    model.eval()
-    if use_cuda:
-        model.cuda()
-
-    for p in model.features.parameters():
-        p.requires_grad = False
-    for p in model.classifier.parameters():
-        p.requires_grad = False
-
-    return model
-
-
-def load_cg(path):
-    cg = pickle.load(open(path))
-    return cg
-
-
-def save(mask_cg):
-    mask = mask_cg.cpu().data.numpy()[0]
-    mask = np.transpose(mask, (1, 2, 0))
-
-    mask = (mask - np.min(mask)) / np.max(mask)
-    mask = 1 - mask
-
-    cv2.imwrite("mask.png", np.uint8(255 * mask))
 
 
 #####
@@ -46,8 +20,8 @@ def save(mask_cg):
 #####
 MODEL_PATH = "gcn-vanilla.pt"
 CG_PATH = "1.pt"
-model = load_model(MODEL_PATH)
-original_cg = load_cg(CG_PATH)
+model = io_utils.load_model(MODEL_PATH)
+original_cg = io_utils.load_cg(CG_PATH)
 
 
 #####
@@ -68,8 +42,8 @@ blurred_cg2 = np.float32(cv2.medianBlur(original_cg, 11)) / 255
 mask_init = np.ones((28, 28), dtype=np.float32)
 
 # Convert to torch variables
-cg = explain.preprocess_cg(original_cg)
-blurred_cg = explain.preprocess_cg(blurred_cg2)
+cg = io_utils.preprocess_cg(original_cg)
+blurred_cg = io_utils.preprocess_cg(blurred_cg2)
 mask = explain.numpy_to_torch(mask_init)
 
 if use_cuda:
@@ -97,7 +71,7 @@ for i in range(max_iterations):
     outputs = torch.nn.Softmax()(model(perturbed_input))
     loss = (
         l1_coeff * torch.mean(torch.abs(1 - mask))
-        + tv_coeff * explain.tv_norm(mask, tv_beta)
+        + tv_coeff * math_utils.tv_norm(mask, tv_beta)
         + outputs[0, category]
     )
 
@@ -109,4 +83,4 @@ for i in range(max_iterations):
     mask.data.clamp_(0, 1)
 
 upsampled_mask = upsample(mask)
-save(upsampled_mask)
+io_utils.save(upsampled_mask)
