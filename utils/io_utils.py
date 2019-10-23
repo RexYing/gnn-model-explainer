@@ -13,6 +13,14 @@ import torch
 import networkx as nx
 import tensorboardX
 
+import cv2
+
+import torch
+import torch.nn as nn
+from torch.autograd import Variable
+
+use_cuda = torch.cuda.is_available()
+
 
 def gen_prefix(args):
     '''Generate label prefix for a graph model.
@@ -94,6 +102,46 @@ def load_ckpt(args, isbest=False):
         ckpt = torch.load(filename)
     return ckpt
 
+def preprocess_cg(cg):
+    """Pre-process computation graph."""
+    if use_cuda:
+        preprocessed_cg_tensor = torch.from_numpy(cg).cuda()
+    else:
+        preprocessed_cg_tensor = torch.from_numpy(cg)
+
+    preprocessed_cg_tensor.unsqueeze_(0)
+    return Variable(preprocessed_cg_tensor, requires_grad=False)
+
+def load_model(path):
+    """Load a pytorch model."""
+    model = torch.load(path)
+    model.eval()
+    if use_cuda:
+        model.cuda()
+
+    for p in model.features.parameters():
+        p.requires_grad = False
+    for p in model.classifier.parameters():
+        p.requires_grad = False
+
+    return model
+
+
+def load_cg(path):
+    """Load a computation graph."""
+    cg = pickle.load(open(path))
+    return cg
+
+
+def save(mask_cg):
+    """Save a rendering of the computation graph mask."""
+    mask = mask_cg.cpu().data.numpy()[0]
+    mask = np.transpose(mask, (1, 2, 0))
+
+    mask = (mask - np.min(mask)) / np.max(mask)
+    mask = 1 - mask
+
+    cv2.imwrite("mask.png", np.uint8(255 * mask))
 
 def log_matrix(writer, mat, name, epoch, fig_size=(8, 6), dpi=200):
     """Save an image of a matrix to disk.
