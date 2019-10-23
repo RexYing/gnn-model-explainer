@@ -109,6 +109,16 @@ def load_ckpt(args, isbest=False):
     if os.path.isfile(filename):
         print("=> loading checkpoint '{}'".format(filename))
         ckpt = torch.load(filename)
+    else:
+        print("Checkpoint does not exist!")
+        print("Checked path -- {}".format(filename))
+        print("Make sure you have provided the correct path!")
+        print("You may have forgotten to train a model for this dataset.")
+        print()
+        print("To train one of the paper's models, run the following")
+        print(">> python train.py --dataset=DATASET_NAME")
+        print()
+        raise Exception("File not found.")
     return ckpt
 
 def preprocess_cg(cg):
