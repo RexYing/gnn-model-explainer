@@ -24,8 +24,6 @@ from tensorboardX import SummaryWriter
 
 import gengraph
 
-import load_data
-
 import utils.math_utils as math_utils
 import utils.io_utils as io_utils
 import utils.parser_utils as parser_utils
@@ -668,9 +666,9 @@ def ppi_essential_task(args, writer=None):
         "G-HumanEssential.tsv",
         feat_file=feat_file,
     )
-    labels = np.array([G.node[u]["label"] for u in G.nodes()])
+    labels = np.array([G.nodes[u]["label"] for u in G.nodes()])
     num_classes = max(labels) + 1
-    input_dim = G.node[next(iter(G.nodes()))]["feat"].shape[0]
+    input_dim = G.nodes[next(iter(G.nodes()))]["feat"].shape[0]
 
     if args.method == "attn":
         print("Method: attn")
@@ -730,7 +728,7 @@ def syn_task1(args, writer=None):
 def syn_task2(args, writer=None):
     # data
     G, labels, name = gengraph.gen_syn2()
-    input_dim = len(G.node[0]["feat"])
+    input_dim = len(G.nodes[0]["feat"])
     num_classes = max(labels) + 1
 
     if args.method == "attn":
@@ -979,14 +977,14 @@ def benchmark_task(args, writer=None, feat="node-label"):
     if feat == "node-feat" and "feat_dim" in graphs[0].graph:
         print("Using node features")
         input_dim = graphs[0].graph["feat_dim"]
-    elif feat == "node-label" and "label" in graphs[0].node[0]:
+    elif feat == "node-label" and "label" in graphs[0].nodes[0]:
         print("Using node labels")
         for G in graphs:
             for u in G.nodes():
-                G.node[u]["feat"] = np.array(G.node[u]["label"])
+                G.nodes[u]["feat"] = np.array(G.nodes[u]["label"])
                 # make it -1/1 instead of 0/1
-                # feat = np.array(G.node[u]['label'])
-                # G.node[u]['feat'] = feat * 2 - 1
+                # feat = np.array(G.nodes[u]['label'])
+                # G.nodes[u]['feat'] = feat * 2 - 1
     else:
         print("Using constant labels")
         featgen_const = featgen.ConstFeatureGen(np.ones(args.input_dim, dtype=float))
@@ -1047,11 +1045,11 @@ def benchmark_task_val(args, writer=None, feat="node-label"):
     if feat == "node-feat" and "feat_dim" in graphs[0].graph:
         print("Using node features")
         input_dim = graphs[0].graph["feat_dim"]
-    elif feat == "node-label" and "label" in graphs[0].node[0]:
+    elif feat == "node-label" and "label" in graphs[0].nodes[0]:
         print("Using node labels")
         for G in graphs:
             for u in G.nodes():
-                G.node[u]["feat"] = np.array(G.node[u]["label"])
+                G.nodes[u]["feat"] = np.array(G.nodes[u]["label"])
     else:
         print("Using constant labels")
         featgen_const = featgen.ConstFeatureGen(np.ones(args.input_dim, dtype=float))
