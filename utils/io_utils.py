@@ -192,13 +192,13 @@ def denoise_graph(adj, node_idx, feat=None, label=None, threshold=0.1, threshold
     num_nodes = adj.shape[-1]
     G = nx.Graph()
     G.add_nodes_from(range(num_nodes))
-    G.node[node_idx]["self"] = 1
+    G.nodes[node_idx]["self"] = 1
     if feat is not None:
         for node in G.nodes():
-            G.node[node]["feat"] = feat[node]
+            G.nodes[node]["feat"] = feat[node]
     if label is not None:
         for node in G.nodes():
-            G.node[node]["label"] = label[node]
+            G.nodes[node]["label"] = label[node]
 
     if threshold_num is not None:
         adj += np.random.rand(adj.shape[0], adj.shape[1]) * 1e-4
@@ -220,7 +220,8 @@ def denoise_graph(adj, node_idx, feat=None, label=None, threshold=0.1, threshold
         ]
     G.add_weighted_edges_from(weighted_edge_list)
     if max_component:
-        G = max(nx.connected_component_subgraphs(G), key=len)
+        largest_cc = max(nx.connected_components(G), key=len)
+        G = G.subgraph(largest_cc).copy()
     else:
         # remove zero degree nodes
         G.remove_nodes_from(list(nx.isolates(G)))
@@ -256,8 +257,8 @@ def log_graph(
     # maximum value for node color
     vmax = 8
     for i in Gc.nodes():
-        if nodecolor == "feat" and "feat" in Gc.node[i]:
-            num_classes = Gc.node[i]["feat"].size()[0]
+        if nodecolor == "feat" and "feat" in Gc.nodes[i]:
+            num_classes = Gc.nodes[i]["feat"].size()[0]
             if num_classes >= 10:
                 cmap = plt.get_cmap("tab20")
                 vmax = 19
@@ -268,13 +269,13 @@ def log_graph(
 
     feat_labels = {}
     for i in Gc.nodes():
-        if identify_self and "self" in Gc.node[i]:
+        if identify_self and "self" in Gc.nodes[i]:
             node_colors.append(0)
-        elif nodecolor == "label" and "label" in Gc.node[i]:
-            node_colors.append(Gc.node[i]["label"] + 1)
-        elif nodecolor == "feat" and "feat" in Gc.node[i]:
-            # print(Gc.node[i]['feat'])
-            feat = Gc.node[i]["feat"].detach().numpy()
+        elif nodecolor == "label" and "label" in Gc.nodes[i]:
+            node_colors.append(Gc.nodes[i]["label"] + 1)
+        elif nodecolor == "feat" and "feat" in Gc.nodes[i]:
+            # print(Gc.nodes[i]['feat'])
+            feat = Gc.nodes[i]["feat"].detach().numpy()
             # idx with pos val in 1D array
             feat_class = 0
             for j in range(len(feat)):
@@ -521,9 +522,9 @@ def read_graphfile(datadir, dataname, max_nodes=None, edge_labels=False):
                 node_label_one_hot = [0] * num_unique_node_labels
                 node_label = node_labels[u - 1]
                 node_label_one_hot[node_label] = 1
-                G.node[u]["label"] = node_label_one_hot
+                G.nodes[u]["label"] = node_label_one_hot
             if len(node_attrs) > 0:
-                G.node[u]["feat"] = node_attrs[u - 1]
+                G.nodes[u]["feat"] = node_attrs[u - 1]
         if len(node_attrs) > 0:
             G.graph["feat_dim"] = node_attrs[0].shape[0]
 
@@ -571,14 +572,14 @@ def read_biosnap(datadir, edgelist_file, label_file, feat_file=None, concat=True
         if int(line[0]) not in G:
             missing_node += 1
         else:
-            G.node[int(line[0])]["label"] = int(line[1] == "Essential")
+            G.nodes[int(line[0])]["label"] = int(line[1] == "Essential")
 
     print("missing node: ", missing_node)
 
     missing_label = 0
     remove_nodes = []
     for u in G.nodes():
-        if "label" not in G.node[u]:
+        if "label" not in G.nodes[u]:
             missing_label += 1
             remove_nodes.append(u)
     G.remove_nodes_from(remove_nodes)
@@ -598,16 +599,16 @@ def read_biosnap(datadir, edgelist_file, label_file, feat_file=None, concat=True
                     node = int(row[0])
                     onehot = np.zeros(10)
                     onehot[min(G.degree[node], 10) - 1] = 1.0
-                    G.node[node]["feat"] = np.hstack(
+                    G.nodes[node]["feat"] = np.hstack(
                         (np.log(row[1:] + 0.1), [1.0], onehot)
                     )
                 else:
-                    G.node[int(row[0])]["feat"] = np.log(row[1:] + 0.1)
+                    G.nodes[int(row[0])]["feat"] = np.log(row[1:] + 0.1)
 
         missing_feat = 0
         remove_nodes = []
         for u in G.nodes():
-            if "feat" not in G.node[u]:
+            if "feat" not in G.nodes[u]:
                 missing_feat += 1
                 remove_nodes.append(u)
         G.remove_nodes_from(remove_nodes)
