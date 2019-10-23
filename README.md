@@ -21,6 +21,52 @@ See [INSTALLATION.md](#)
 
 ### Replicating the paper's results
 
+#### Training a GCN model 
+
+This is the model that will be explained. We do provide [pre-trained models](#TODO) for all of the experiments
+that are shown in the paper. To re-train these models, run the following:
+
+```
+python train.py --dataset=EXPERIMENT_NAME
+```
+
+where `EXPERIMENT_NAME` is the experiment you want to replicate. 
+
+For a complete list of options in training the GCN models:
+
+```
+python train.py --help
+```
+
+> TODO: Explain outputs
+
+#### Explaining a GCN model
+
+To run the explainer, run the following:
+
+```
+python explainer_main.py --dataset=EXPERIMENT_NAME
+```
+
+where `EXPERIMENT_NAME` is the experiment you want to replicate. 
+
+
+
+For a complete list of options provided by the explainer:
+
+```
+python train.py --help
+```
+
+> TODO: Explain outputs + visualizations + baselines
+
+#### Included experiments
+
+| Name | `EXPERIMENT_NAME` | Description  |
+|------|-------------------|--------------|
+| Synthetic #1 | `syn1`  | The first synthetic experiment -- a random BA graph with House attachments.  |
+| TODO | TODO  | TODO | 
+
 ### Using the explainer on other models
 
 
