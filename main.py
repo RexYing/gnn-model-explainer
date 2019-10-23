@@ -12,6 +12,8 @@ from utils import io_utils
 use_cuda = torch.cuda.is_available()
 
 
+# TODO: Is this still used?
+
 #####
 #
 # 1) Load trained GNN model

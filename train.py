@@ -1,4 +1,7 @@
+""" train.py
 
+    Main interface to train the GNNs that will be later explained.
+"""
 import argparse
 import os
 import pickle
