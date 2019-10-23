@@ -658,9 +658,9 @@ def prepare_data(graphs, args, test_graphs=None, max_nodes=0):
 
 def ppi_essential_task(args, writer=None):
     feat_file = "G-MtfPathways_gene-motifs.csv"
-    # G = load_data.read_biosnap('data/ppi_essential', 'PP-Pathways_ppi.csv', 'G-HumanEssential.tsv',
+    # G = io_utils.read_biosnap('data/ppi_essential', 'PP-Pathways_ppi.csv', 'G-HumanEssential.tsv',
     #        feat_file=feat_file)
-    G = load_data.read_biosnap(
+    G = io_utils.read_biosnap(
         "data/ppi_essential",
         "hi-union-ppi.tsv",
         "G-HumanEssential.tsv",
@@ -969,7 +969,7 @@ def enron_task(args, idx=None, writer=None):
 
 
 def benchmark_task(args, writer=None, feat="node-label"):
-    graphs = load_data.read_graphfile(
+    graphs = io_utils.read_graphfile(
         args.datadir, args.bmname, max_nodes=args.max_nodes
     )
     print(max([G.graph["label"] for G in graphs]))
@@ -1038,7 +1038,7 @@ def benchmark_task(args, writer=None, feat="node-label"):
 
 def benchmark_task_val(args, writer=None, feat="node-label"):
     all_vals = []
-    graphs = load_data.read_graphfile(
+    graphs = io_utils.read_graphfile(
         args.datadir, args.bmname, max_nodes=args.max_nodes
     )
 
