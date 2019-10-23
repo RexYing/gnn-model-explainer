@@ -1,4 +1,4 @@
-"""graph_sampler.py
+"""graph_utils.py
 
    Utility for sampling graphs from a dataset.
 """

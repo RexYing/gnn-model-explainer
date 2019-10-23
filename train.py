@@ -24,8 +24,6 @@ from tensorboardX import SummaryWriter
 
 import gengraph
 
-from graph_sampler import GraphSampler
-
 import load_data
 
 import utils.math_utils as math_utils
@@ -33,6 +31,7 @@ import utils.io_utils as io_utils
 import utils.parser_utils as parser_utils
 import utils.train_utils as train_utils
 import utils.featgen as featgen
+import utils.graph_utils as graph_utils
 
 import models
 
@@ -610,7 +609,7 @@ def prepare_data(graphs, args, test_graphs=None, max_nodes=0):
     )
 
     # minibatch
-    dataset_sampler = GraphSampler(
+    dataset_sampler = graph_utils.GraphSampler(
         train_graphs,
         normalize=False,
         max_num_nodes=max_nodes,
@@ -623,8 +622,11 @@ def prepare_data(graphs, args, test_graphs=None, max_nodes=0):
         num_workers=args.num_workers,
     )
 
-    dataset_sampler = GraphSampler(
-        val_graphs, normalize=False, max_num_nodes=max_nodes, features=args.feature_type
+    dataset_sampler = graph_utils.GraphSampler(
+        val_graphs, 
+        normalize=False, 
+        max_num_nodes=max_nodes, 
+        features=args.feature_type
     )
     val_dataset_loader = torch.utils.data.DataLoader(
         dataset_sampler,
@@ -633,7 +635,7 @@ def prepare_data(graphs, args, test_graphs=None, max_nodes=0):
         num_workers=args.num_workers,
     )
 
-    dataset_sampler = GraphSampler(
+    dataset_sampler = graph_utils.GraphSampler(
         test_graphs,
         normalize=False,
         max_num_nodes=max_nodes,
