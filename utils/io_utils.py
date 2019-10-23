@@ -240,7 +240,7 @@ def denoise_graph(adj, node_idx, feat=None, label=None, threshold=0.1, threshold
         G.remove_nodes_from(list(nx.isolates(G)))
     return G
 
-
+# TODO: unify log_graph and log_graph2
 def log_graph(
     writer,
     Gc,
@@ -655,3 +655,112 @@ def build_aromaticity_dataset():
             print("Molecule %s failed"%i)
     data = pd.DataFrame(collector)
     data.to_csv(basename + '_pandas.csv')
+
+
+def gen_train_plt_name(args):
+    return "results/" + io_utils.gen_prefix(args) + ".png"
+
+
+def log_assignment(assign_tensor, writer, epoch, batch_idx):
+    plt.switch_backend("agg")
+    fig = plt.figure(figsize=(8, 6), dpi=300)
+
+    # has to be smaller than args.batch_size
+    for i in range(len(batch_idx)):
+        plt.subplot(2, 2, i + 1)
+        plt.imshow(
+            assign_tensor.cpu().data.numpy()[batch_idx[i]], cmap=plt.get_cmap("BuPu")
+        )
+        cbar = plt.colorbar()
+        cbar.solids.set_edgecolor("face")
+    plt.tight_layout()
+    fig.canvas.draw()
+
+    data = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep="")
+    data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+    writer.add_image("assignment", data, epoch)
+
+# TODO: unify log_graph and log_graph2
+def log_graph2(adj, batch_num_nodes, writer, epoch, batch_idx, assign_tensor=None):
+    plt.switch_backend("agg")
+    fig = plt.figure(figsize=(8, 6), dpi=300)
+
+    for i in range(len(batch_idx)):
+        ax = plt.subplot(2, 2, i + 1)
+        num_nodes = batch_num_nodes[batch_idx[i]]
+        adj_matrix = adj[batch_idx[i], :num_nodes, :num_nodes].cpu().data.numpy()
+        G = nx.from_numpy_matrix(adj_matrix)
+        nx.draw(
+            G,
+            pos=nx.spring_layout(G),
+            with_labels=True,
+            node_color="#336699",
+            edge_color="grey",
+            width=0.5,
+            node_size=300,
+            alpha=0.7,
+        )
+        ax.xaxis.set_visible(False)
+
+    plt.tight_layout()
+    fig.canvas.draw()
+
+    data = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep="")
+    data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+    writer.add_image("graphs", data, epoch)
+
+    # log a label-less version
+    # fig = plt.figure(figsize=(8,6), dpi=300)
+    # for i in range(len(batch_idx)):
+    #    ax = plt.subplot(2, 2, i+1)
+    #    num_nodes = batch_num_nodes[batch_idx[i]]
+    #    adj_matrix = adj[batch_idx[i], :num_nodes, :num_nodes].cpu().data.numpy()
+    #    G = nx.from_numpy_matrix(adj_matrix)
+    #    nx.draw(G, pos=nx.spring_layout(G), with_labels=False, node_color='#336699',
+    #            edge_color='grey', width=0.5, node_size=25,
+    #            alpha=0.8)
+
+    # plt.tight_layout()
+    # fig.canvas.draw()
+
+    # data = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
+    # data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+    # writer.add_image('graphs_no_label', data, epoch)
+
+    # colored according to assignment
+    assignment = assign_tensor.cpu().data.numpy()
+    fig = plt.figure(figsize=(8, 6), dpi=300)
+
+    num_clusters = assignment.shape[2]
+    all_colors = np.array(range(num_clusters))
+
+    for i in range(len(batch_idx)):
+        ax = plt.subplot(2, 2, i + 1)
+        num_nodes = batch_num_nodes[batch_idx[i]]
+        adj_matrix = adj[batch_idx[i], :num_nodes, :num_nodes].cpu().data.numpy()
+
+        label = np.argmax(assignment[batch_idx[i]], axis=1).astype(int)
+        label = label[: batch_num_nodes[batch_idx[i]]]
+        node_colors = all_colors[label]
+
+        G = nx.from_numpy_matrix(adj_matrix)
+        nx.draw(
+            G,
+            pos=nx.spring_layout(G),
+            with_labels=False,
+            node_color=node_colors,
+            edge_color="grey",
+            width=0.4,
+            node_size=50,
+            cmap=plt.get_cmap("Set1"),
+            vmin=0,
+            vmax=num_clusters - 1,
+            alpha=0.8,
+        )
+
+    plt.tight_layout()
+    fig.canvas.draw()
+
+    data = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep="")
+    data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+    writer.add_image("graphs_colored", data, epoch)

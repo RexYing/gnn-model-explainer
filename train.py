@@ -75,10 +75,7 @@ def evaluate_node(ypred, labels, train_idx, test_idx):
     pred_test = np.ravel(pred_labels[:, test_idx])
     labels_train = np.ravel(labels[:, train_idx])
     labels_test = np.ravel(labels[:, test_idx])
-    # pred_train = np.ravel([pred_labels[i, train_idx[i]] for i in range(10)])
-    # pred_test = np.ravel([pred_labels[i, test_idx[i]] for i in range(10)])
-    # labels_train = np.ravel([labels[i, train_idx[i]] for i in range(10)])
-    # labels_test = np.ravel([labels[i, test_idx[i]] for i in range(10)])
+
     result_train = {
         "prec": metrics.precision_score(labels_train, pred_train, average="macro"),
         "recall": metrics.recall_score(labels_train, pred_train, average="macro"),
@@ -92,116 +89,6 @@ def evaluate_node(ypred, labels, train_idx, test_idx):
         "conf_mat": metrics.confusion_matrix(labels_test, pred_test),
     }
     return result_train, result_test
-
-
-def gen_train_plt_name(args):
-    return "results/" + io_utils.gen_prefix(args) + ".png"
-
-
-def log_assignment(assign_tensor, writer, epoch, batch_idx):
-    plt.switch_backend("agg")
-    fig = plt.figure(figsize=(8, 6), dpi=300)
-
-    # has to be smaller than args.batch_size
-    for i in range(len(batch_idx)):
-        plt.subplot(2, 2, i + 1)
-        plt.imshow(
-            assign_tensor.cpu().data.numpy()[batch_idx[i]], cmap=plt.get_cmap("BuPu")
-        )
-        cbar = plt.colorbar()
-        cbar.solids.set_edgecolor("face")
-    plt.tight_layout()
-    fig.canvas.draw()
-
-    data = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep="")
-    data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-    writer.add_image("assignment", data, epoch)
-
-
-def log_graph(adj, batch_num_nodes, writer, epoch, batch_idx, assign_tensor=None):
-    plt.switch_backend("agg")
-    fig = plt.figure(figsize=(8, 6), dpi=300)
-
-    for i in range(len(batch_idx)):
-        ax = plt.subplot(2, 2, i + 1)
-        num_nodes = batch_num_nodes[batch_idx[i]]
-        adj_matrix = adj[batch_idx[i], :num_nodes, :num_nodes].cpu().data.numpy()
-        G = nx.from_numpy_matrix(adj_matrix)
-        nx.draw(
-            G,
-            pos=nx.spring_layout(G),
-            with_labels=True,
-            node_color="#336699",
-            edge_color="grey",
-            width=0.5,
-            node_size=300,
-            alpha=0.7,
-        )
-        ax.xaxis.set_visible(False)
-
-    plt.tight_layout()
-    fig.canvas.draw()
-
-    data = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep="")
-    data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-    writer.add_image("graphs", data, epoch)
-
-    # log a label-less version
-    # fig = plt.figure(figsize=(8,6), dpi=300)
-    # for i in range(len(batch_idx)):
-    #    ax = plt.subplot(2, 2, i+1)
-    #    num_nodes = batch_num_nodes[batch_idx[i]]
-    #    adj_matrix = adj[batch_idx[i], :num_nodes, :num_nodes].cpu().data.numpy()
-    #    G = nx.from_numpy_matrix(adj_matrix)
-    #    nx.draw(G, pos=nx.spring_layout(G), with_labels=False, node_color='#336699',
-    #            edge_color='grey', width=0.5, node_size=25,
-    #            alpha=0.8)
-
-    # plt.tight_layout()
-    # fig.canvas.draw()
-
-    # data = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
-    # data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-    # writer.add_image('graphs_no_label', data, epoch)
-
-    # colored according to assignment
-    assignment = assign_tensor.cpu().data.numpy()
-    fig = plt.figure(figsize=(8, 6), dpi=300)
-
-    num_clusters = assignment.shape[2]
-    all_colors = np.array(range(num_clusters))
-
-    for i in range(len(batch_idx)):
-        ax = plt.subplot(2, 2, i + 1)
-        num_nodes = batch_num_nodes[batch_idx[i]]
-        adj_matrix = adj[batch_idx[i], :num_nodes, :num_nodes].cpu().data.numpy()
-
-        label = np.argmax(assignment[batch_idx[i]], axis=1).astype(int)
-        label = label[: batch_num_nodes[batch_idx[i]]]
-        node_colors = all_colors[label]
-
-        G = nx.from_numpy_matrix(adj_matrix)
-        nx.draw(
-            G,
-            pos=nx.spring_layout(G),
-            with_labels=False,
-            node_color=node_colors,
-            edge_color="grey",
-            width=0.4,
-            node_size=50,
-            cmap=plt.get_cmap("Set1"),
-            vmin=0,
-            vmax=num_clusters - 1,
-            alpha=0.8,
-        )
-
-    plt.tight_layout()
-    fig.canvas.draw()
-
-    data = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep="")
-    data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-    writer.add_image("graphs_colored", data, epoch)
-
 
 def train(
     dataset,
@@ -272,8 +159,6 @@ def train(
             optimizer.step()
             iter += 1
             avg_loss += loss
-            # if iter % 20 == 0:
-            #    print('Iter: ', iter, ', loss: ', loss.data[0])
 
             # log once per XX epochs
             if (
@@ -282,8 +167,8 @@ def train(
                 and args.method == "soft-assign"
                 and writer is not None
             ):
-                log_assignment(model.assign_tensor, writer, epoch, writer_batch_idx)
-                log_graph(
+                io_utils.log_assignment(model.assign_tensor, writer, epoch, writer_batch_idx)
+                io_utils.log_graph2(
                     adj,
                     batch_num_nodes,
                     writer,
@@ -336,7 +221,7 @@ def train(
     else:
         plt.plot(best_val_epochs, best_val_accs, "bo")
         plt.legend(["train", "val"])
-    plt.savefig(gen_train_plt_name(args), dpi=600)
+    plt.savefig(io_utils.gen_train_plt_name(args), dpi=600)
     plt.close()
     matplotlib.style.use("default")
 
@@ -1262,13 +1147,8 @@ def arg_parse():
 def main():
     prog_args = arg_parse()
 
-    # export scalar data to JSON for external processing
     path = os.path.join(prog_args.logdir, io_utils.gen_prefix(prog_args))
-    # if os.path.isdir(path):
-    #     print('Remove existing log dir: ', path)
-    #     shutil.rmtree(path)
     writer = SummaryWriter(path)
-    # writer = None
 
     if prog_args.gpu:
         os.environ["CUDA_VISIBLE_DEVICES"] = prog_args.cuda
