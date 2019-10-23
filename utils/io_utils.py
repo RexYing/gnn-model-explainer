@@ -381,3 +381,16 @@ def sparse_mx_to_torch_sparse_tensor(sparse_mx):
     shape = torch.Size(sparse_mx.shape)
     return torch.sparse.FloatTensor(indices, values, shape)
 
+def numpy_to_torch(img, requires_grad=True):
+    if len(img.shape) < 3:
+        output = np.float32([img])
+    else:
+        output = np.transpose(img, (2, 0, 1))
+
+    output = torch.from_numpy(output)
+    if use_cuda:
+        output = output.cuda()
+
+    output.unsqueeze_(0)
+    v = Variable(output, requires_grad=requires_grad)
+    return v

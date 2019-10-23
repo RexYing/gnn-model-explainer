@@ -44,7 +44,7 @@ mask_init = np.ones((28, 28), dtype=np.float32)
 # Convert to torch variables
 cg = io_utils.preprocess_cg(original_cg)
 blurred_cg = io_utils.preprocess_cg(blurred_cg2)
-mask = explain.numpy_to_torch(mask_init)
+mask = io_utils.numpy_to_torch(mask_init)
 
 if use_cuda:
     upsample = torch.nn.UpsamplingBilinear2d(size=(224, 224)).cuda()
@@ -65,7 +65,7 @@ for i in range(max_iterations):
 
     noise = np.zeros((224, 224, 3), dtype=np.float32)
     cv2.randn(noise, 0, 0.2)
-    noise = explain.numpy_to_torch(noise)
+    noise = io_utils.numpy_to_torch(noise)
     perturbed_input = perturbed_input + noise
 
     outputs = torch.nn.Softmax()(model(perturbed_input))
