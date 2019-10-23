@@ -26,6 +26,9 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 
+# Only necessary to rebuild the Chemistry example
+# from rdkit import Chem
+
 import utils.featgen as featgen
 
 use_cuda = torch.cuda.is_available()
@@ -626,3 +629,29 @@ def read_biosnap(datadir, edgelist_file, label_file, feat_file=None, concat=True
 
     return G
 
+
+def build_aromaticity_dataset():
+    filename = "data/tox21_10k_data_all.sdf"
+    basename = filename.split(".")[0]
+    collector = []
+    sdprovider = Chem.SDMolSupplier(filename)
+    for i,mol in enumerate(sdprovider):
+        try:
+            moldict = {}
+            moldict['smiles'] = Chem.MolToSmiles(mol)
+            #Parse Data
+            for propname in mol.GetPropNames():
+                moldict[propname] = mol.GetProp(propname)
+            nb_bonds = len(mol.GetBonds())
+            is_aromatic = False; aromatic_bonds = []
+            for j in range(nb_bonds):
+                if mol.GetBondWithIdx(j).GetIsAromatic():
+                    aromatic_bonds.append(j)
+                    is_aromatic = True 
+            moldict['aromaticity'] = is_aromatic
+            moldict['aromatic_bonds'] = aromatic_bonds
+            collector.append(moldict)
+        except:
+            print("Molecule %s failed"%i)
+    data = pd.DataFrame(collector)
+    data.to_csv(basename + '_pandas.csv')
