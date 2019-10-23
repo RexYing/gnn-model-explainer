@@ -1,6 +1,8 @@
 # gnn-explainer
 
-This repository contains the source code for the paper `GNNExplainer: Generating Explanations for Graph Neural Networks` by Rex Ying, Dylan Bourgeois, Jiaxuan You, Marinka Zitnik, Jure Leskovec, presented at NeurIPS 2019.
+This repository contains the source code for the paper `GNNExplainer: Generating Explanations for Graph Neural Networks` by [Rex Ying](https://cs.stanford.edu/people/rexy/), [Dylan Bourgeois](https://dtsbourg.me/), [Jiaxuan You](https://cs.stanford.edu/~jiaxuan/), [Marinka Zitnik](http://helikoid.si/cms/) & [Jure Leskovec](https://cs.stanford.edu/people/jure/), presented at [NeurIPS 2019](nips.cc).
+
+[[Arxiv]](https://arxiv.org/abs/1903.03894) [[BibTex]](https://dblp.uni-trier.de/rec/bibtex/journals/corr/abs-1903-03894) [[Google Scholar]](https://scholar.google.com/scholar?q=GNNExplainer%3A%20Generating%20Explanations%20for%20Graph%20Neural%20Networks%20Rex%20arXiv%202019)
 
 ```
 @misc{ying2019gnnexplainer,
@@ -62,8 +64,8 @@ python train.py --help
 
 #### Included experiments
 
-| Name | `EXPERIMENT_NAME` | Description  |
-|------|-------------------|--------------|
+| Name     | `EXPERIMENT_NAME` | Description  |
+|----------|:-------------------:|--------------|
 | Synthetic #1 | `syn1`  | The first synthetic experiment -- a random BA graph with House attachments.  |
 | TODO | TODO  | TODO | 
 
