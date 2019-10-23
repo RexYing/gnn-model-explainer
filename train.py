@@ -33,63 +33,98 @@ import utils.graph_utils as graph_utils
 
 import models
 
-def evaluate(dataset, model, args, name="Validation", max_num_examples=None):
-    model.eval()
 
-    labels = []
-    preds = []
-    for batch_idx, data in enumerate(dataset):
-        adj = Variable(data["adj"].float(), requires_grad=False).cuda()
-        h0 = Variable(data["feats"].float()).cuda()
-        labels.append(data["label"].long().numpy())
-        batch_num_nodes = data["num_nodes"].int().numpy()
-        assign_input = Variable(
-            data["assign_feats"].float(), requires_grad=False
-        ).cuda()
+#############################
+#
+# Prepare Data
+#
+#############################
+def prepare_data(graphs, args, test_graphs=None, max_nodes=0):
 
-        ypred, att_adj = model(h0, adj, batch_num_nodes, assign_x=assign_input)
-        _, indices = torch.max(ypred, 1)
-        preds.append(indices.cpu().data.numpy())
+    random.shuffle(graphs)
+    if test_graphs is None:
+        train_idx = int(len(graphs) * args.train_ratio)
+        test_idx = int(len(graphs) * (1 - args.test_ratio))
+        train_graphs = graphs[:train_idx]
+        val_graphs = graphs[train_idx:test_idx]
+        test_graphs = graphs[test_idx:]
+    else:
+        train_idx = int(len(graphs) * args.train_ratio)
+        train_graphs = graphs[:train_idx]
+        val_graphs = graph[train_idx:]
+    print(
+        "Num training graphs: ",
+        len(train_graphs),
+        "; Num validation graphs: ",
+        len(val_graphs),
+        "; Num testing graphs: ",
+        len(test_graphs),
+    )
 
-        if max_num_examples is not None:
-            if (batch_idx + 1) * args.batch_size > max_num_examples:
-                break
+    print("Number of graphs: ", len(graphs))
+    print("Number of edges: ", sum([G.number_of_edges() for G in graphs]))
+    print(
+        "Max, avg, std of graph size: ",
+        max([G.number_of_nodes() for G in graphs]),
+        ", " "{0:.2f}".format(np.mean([G.number_of_nodes() for G in graphs])),
+        ", " "{0:.2f}".format(np.std([G.number_of_nodes() for G in graphs])),
+    )
 
-    labels = np.hstack(labels)
-    preds = np.hstack(preds)
+    # minibatch
+    dataset_sampler = graph_utils.GraphSampler(
+        train_graphs,
+        normalize=False,
+        max_num_nodes=max_nodes,
+        features=args.feature_type,
+    )
+    train_dataset_loader = torch.utils.data.DataLoader(
+        dataset_sampler,
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=args.num_workers,
+    )
 
-    result = {
-        "prec": metrics.precision_score(labels, preds, average="macro"),
-        "recall": metrics.recall_score(labels, preds, average="macro"),
-        "acc": metrics.accuracy_score(labels, preds),
-    }
-    print(name, " accuracy:", result["acc"])
-    return result
+    dataset_sampler = graph_utils.GraphSampler(
+        val_graphs, 
+        normalize=False, 
+        max_num_nodes=max_nodes, 
+        features=args.feature_type
+    )
+    val_dataset_loader = torch.utils.data.DataLoader(
+        dataset_sampler,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=args.num_workers,
+    )
+
+    dataset_sampler = graph_utils.GraphSampler(
+        test_graphs,
+        normalize=False,
+        max_num_nodes=max_nodes,
+        features=args.feature_type,
+    )
+    test_dataset_loader = torch.utils.data.DataLoader(
+        dataset_sampler,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=args.num_workers,
+    )
+
+    return (
+        train_dataset_loader,
+        val_dataset_loader,
+        test_dataset_loader,
+        dataset_sampler.max_num_nodes,
+        dataset_sampler.feat_dim,
+        dataset_sampler.assign_feat_dim,
+    )
 
 
-def evaluate_node(ypred, labels, train_idx, test_idx):
-    _, pred_labels = torch.max(ypred, 2)
-    pred_labels = pred_labels.numpy()
-
-    pred_train = np.ravel(pred_labels[:, train_idx])
-    pred_test = np.ravel(pred_labels[:, test_idx])
-    labels_train = np.ravel(labels[:, train_idx])
-    labels_test = np.ravel(labels[:, test_idx])
-
-    result_train = {
-        "prec": metrics.precision_score(labels_train, pred_train, average="macro"),
-        "recall": metrics.recall_score(labels_train, pred_train, average="macro"),
-        "acc": metrics.accuracy_score(labels_train, pred_train),
-        "conf_mat": metrics.confusion_matrix(labels_train, pred_train),
-    }
-    result_test = {
-        "prec": metrics.precision_score(labels_test, pred_test, average="macro"),
-        "recall": metrics.recall_score(labels_test, pred_test, average="macro"),
-        "acc": metrics.accuracy_score(labels_test, pred_test),
-        "conf_mat": metrics.confusion_matrix(labels_test, pred_test),
-    }
-    return result_train, result_test
-
+#############################
+#
+# Training 
+#
+#############################
 def train(
     dataset,
     model,
@@ -460,87 +495,76 @@ def train_node_classifier_multigraph(G_list, labels, model, args, writer=None):
     io_utils.save_checkpoint(model, optimizer, args, num_epochs=-1, cg_dict=cg_data)
 
 
-def prepare_data(graphs, args, test_graphs=None, max_nodes=0):
 
-    random.shuffle(graphs)
-    if test_graphs is None:
-        train_idx = int(len(graphs) * args.train_ratio)
-        test_idx = int(len(graphs) * (1 - args.test_ratio))
-        train_graphs = graphs[:train_idx]
-        val_graphs = graphs[train_idx:test_idx]
-        test_graphs = graphs[test_idx:]
-    else:
-        train_idx = int(len(graphs) * args.train_ratio)
-        train_graphs = graphs[:train_idx]
-        val_graphs = graph[train_idx:]
-    print(
-        "Num training graphs: ",
-        len(train_graphs),
-        "; Num validation graphs: ",
-        len(val_graphs),
-        "; Num testing graphs: ",
-        len(test_graphs),
-    )
+#############################
+#
+# Evaluate Trained Model
+#
+#############################
+def evaluate(dataset, model, args, name="Validation", max_num_examples=None):
+    model.eval()
 
-    print("Number of graphs: ", len(graphs))
-    print("Number of edges: ", sum([G.number_of_edges() for G in graphs]))
-    print(
-        "Max, avg, std of graph size: ",
-        max([G.number_of_nodes() for G in graphs]),
-        ", " "{0:.2f}".format(np.mean([G.number_of_nodes() for G in graphs])),
-        ", " "{0:.2f}".format(np.std([G.number_of_nodes() for G in graphs])),
-    )
+    labels = []
+    preds = []
+    for batch_idx, data in enumerate(dataset):
+        adj = Variable(data["adj"].float(), requires_grad=False).cuda()
+        h0 = Variable(data["feats"].float()).cuda()
+        labels.append(data["label"].long().numpy())
+        batch_num_nodes = data["num_nodes"].int().numpy()
+        assign_input = Variable(
+            data["assign_feats"].float(), requires_grad=False
+        ).cuda()
 
-    # minibatch
-    dataset_sampler = graph_utils.GraphSampler(
-        train_graphs,
-        normalize=False,
-        max_num_nodes=max_nodes,
-        features=args.feature_type,
-    )
-    train_dataset_loader = torch.utils.data.DataLoader(
-        dataset_sampler,
-        batch_size=args.batch_size,
-        shuffle=True,
-        num_workers=args.num_workers,
-    )
+        ypred, att_adj = model(h0, adj, batch_num_nodes, assign_x=assign_input)
+        _, indices = torch.max(ypred, 1)
+        preds.append(indices.cpu().data.numpy())
 
-    dataset_sampler = graph_utils.GraphSampler(
-        val_graphs, 
-        normalize=False, 
-        max_num_nodes=max_nodes, 
-        features=args.feature_type
-    )
-    val_dataset_loader = torch.utils.data.DataLoader(
-        dataset_sampler,
-        batch_size=args.batch_size,
-        shuffle=False,
-        num_workers=args.num_workers,
-    )
+        if max_num_examples is not None:
+            if (batch_idx + 1) * args.batch_size > max_num_examples:
+                break
 
-    dataset_sampler = graph_utils.GraphSampler(
-        test_graphs,
-        normalize=False,
-        max_num_nodes=max_nodes,
-        features=args.feature_type,
-    )
-    test_dataset_loader = torch.utils.data.DataLoader(
-        dataset_sampler,
-        batch_size=args.batch_size,
-        shuffle=False,
-        num_workers=args.num_workers,
-    )
+    labels = np.hstack(labels)
+    preds = np.hstack(preds)
 
-    return (
-        train_dataset_loader,
-        val_dataset_loader,
-        test_dataset_loader,
-        dataset_sampler.max_num_nodes,
-        dataset_sampler.feat_dim,
-        dataset_sampler.assign_feat_dim,
-    )
+    result = {
+        "prec": metrics.precision_score(labels, preds, average="macro"),
+        "recall": metrics.recall_score(labels, preds, average="macro"),
+        "acc": metrics.accuracy_score(labels, preds),
+    }
+    print(name, " accuracy:", result["acc"])
+    return result
 
 
+def evaluate_node(ypred, labels, train_idx, test_idx):
+    _, pred_labels = torch.max(ypred, 2)
+    pred_labels = pred_labels.numpy()
+
+    pred_train = np.ravel(pred_labels[:, train_idx])
+    pred_test = np.ravel(pred_labels[:, test_idx])
+    labels_train = np.ravel(labels[:, train_idx])
+    labels_test = np.ravel(labels[:, test_idx])
+
+    result_train = {
+        "prec": metrics.precision_score(labels_train, pred_train, average="macro"),
+        "recall": metrics.recall_score(labels_train, pred_train, average="macro"),
+        "acc": metrics.accuracy_score(labels_train, pred_train),
+        "conf_mat": metrics.confusion_matrix(labels_train, pred_train),
+    }
+    result_test = {
+        "prec": metrics.precision_score(labels_test, pred_test, average="macro"),
+        "recall": metrics.recall_score(labels_test, pred_test, average="macro"),
+        "acc": metrics.accuracy_score(labels_test, pred_test),
+        "conf_mat": metrics.confusion_matrix(labels_test, pred_test),
+    }
+    return result_train, result_test
+
+
+
+#############################
+#
+# Run Experiments
+#
+#############################
 def ppi_essential_task(args, writer=None):
     feat_file = "G-MtfPathways_gene-motifs.csv"
     # G = io_utils.read_biosnap('data/ppi_essential', 'PP-Pathways_ppi.csv', 'G-HumanEssential.tsv',
