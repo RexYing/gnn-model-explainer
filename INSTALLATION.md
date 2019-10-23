@@ -53,3 +53,5 @@ python -m pip install matplotlib networkx pandas sklearn seaborn
 ```
 python -m pip install tensorboardX
 ```
+
+To install [RDKit](https://www.rdkit.org/), follow the instructions provided [on the website](https://www.rdkit.org/docs/Install.html).
