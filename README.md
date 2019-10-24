@@ -53,12 +53,23 @@ python explainer_main.py --dataset=EXPERIMENT_NAME
 where `EXPERIMENT_NAME` is the experiment you want to replicate. 
 
 
-
 For a complete list of options provided by the explainer:
 
 ```
 python train.py --help
 ```
+
+#### Visualizing the explanations
+
+##### Tensorboard
+
+The result of the optimization can be visualized through Tensorboard.
+
+```
+tensorboard --logdir log
+```
+
+You should then have access to visualizations served from `localhost`.
 
 > TODO: Explain outputs + visualizations + baselines
 
