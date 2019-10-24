@@ -30,6 +30,7 @@ import pdb
 
 import utils.io_utils as io_utils
 import utils.train_utils as train_utils
+import utils.graph_utils as graph_utils
 
 
 # import models_gcn.GCN as GCN
@@ -67,60 +68,13 @@ class Explainer:
         self.n_hops = args.num_gc_layers
         self.graph_mode = graph_mode
         self.graph_idx = graph_idx
-        self.neighborhoods = None if self.graph_mode else self._neighborhoods()
+        self.neighborhoods = None if self.graph_mode else graph_utils.neighborhoods(adj=self.adj, n_hops=self.n_hops, use_cuda=use_cuda)
         self.args = args
         self.writer = writer
         self.print_training = print_training
 
-    def _neighborhoods(self):
-        """Returns the self.n_hops degree adjacency matrix."""
-        adj = torch.tensor(self.adj, dtype=torch.float)
-        if use_cuda:
-            adj = adj.cuda()
-        hop_adj = power_adj = adj
-        for i in range(self.n_hops - 1):
-            power_adj = power_adj @ adj
-            prev_hop_adj = hop_adj
-            hop_adj = hop_adj + power_adj
-            hop_adj = (hop_adj > 0).float()
-        return hop_adj.cpu().numpy().astype(int)
-
-    def representer(self):
-        """
-        TODO
-        """
-        self.model.train()
-        self.model.zero_grad()
-        adj = torch.tensor(self.adj, dtype=torch.float)
-        x = torch.tensor(self.feat, requires_grad=True, dtype=torch.float)
-        label = torch.tensor(self.label, dtype=torch.long)
-        if self.args.gpu:
-            adj, x, label = adj.cuda(), x.cuda(), label.cuda()
-
-        preds, _ = self.model(x, adj)
-        preds.retain_grad()
-        self.embedding = self.model.embedding_tensor
-        loss = self.model.loss(preds, label)
-        loss.backward()
-        self.preds_grad = preds.grad
-        pred_idx = np.expand_dims(np.argmax(self.pred, axis=2), axis=2)
-        pred_idx = torch.LongTensor(pred_idx)
-        if self.args.gpu:
-            pred_idx = pred_idx.cuda()
-        self.alpha = self.preds_grad
-
-    def extract_neighborhood(self, node_idx, graph_idx=0):
-        """Returns the neighborhood of a given ndoe.
-        """
-        neighbors_adj_row = self.neighborhoods[graph_idx][node_idx, :]
-        # index of the query node in the new adj
-        node_idx_new = sum(neighbors_adj_row[:node_idx])
-        neighbors = np.nonzero(neighbors_adj_row)[0]
-        sub_adj = self.adj[graph_idx][neighbors][:, neighbors]
-        sub_feat = self.feat[graph_idx, neighbors]
-        sub_label = self.label[graph_idx][neighbors]
-        return node_idx_new, sub_adj, sub_feat, sub_label, neighbors
-
+    
+    # Main method
     def explain(
         self, node_idx, graph_idx=0, graph_mode=False, unconstrained=False, model="exp"
     ):
@@ -265,37 +219,17 @@ class Explainer:
 
         return masked_adj
 
-    def align(
-        self, ref_feat, ref_adj, ref_node_idx, curr_feat, curr_adj, curr_node_idx, args
-    ):
-        ref_adj = torch.FloatTensor(ref_adj)
-        curr_adj = torch.FloatTensor(curr_adj)
 
-        ref_feat = torch.FloatTensor(ref_feat)
-        curr_feat = torch.FloatTensor(curr_feat)
-
-        P = nn.Parameter(torch.FloatTensor(ref_adj.shape[0], curr_adj.shape[0]))
-        with torch.no_grad():
-            nn.init.constant_(P, 1.0 / ref_adj.shape[0])
-            P[ref_node_idx, :] = 0.0
-            P[:, curr_node_idx] = 0.0
-            P[ref_node_idx, curr_node_idx] = 1.0
-        opt = torch.optim.Adam([P], lr=0.01, betas=(0.5, 0.999))
-        for i in range(args.align_steps):
-            opt.zero_grad()
-            feat_loss = torch.norm(P @ curr_feat - ref_feat)
-
-            aligned_adj = P @ curr_adj @ torch.transpose(P, 0, 1)
-            align_loss = torch.norm(aligned_adj - ref_adj)
-            loss = feat_loss + align_loss
-            loss.backward()  # Calculate gradients
-            self.writer.add_scalar("optimization/align_loss", loss, i)
-            print("iter: ", i, "; loss: ", loss)
-            opt.step()
-
-        return P, aligned_adj, P @ curr_feat
-
+    # NODE EXPLAINER
     def explain_nodes(self, node_indices, args, graph_idx=0):
+        """
+        Explain nodes
+
+        Args:
+            - node_indices  :  Indices of the nodes to be explained 
+            - args          :  Program arguments (mainly for logging paths)
+            - graph_idx     :  Index of the graph to explain the nodes from (if multiple).
+        """
         masked_adjs = [
             self.explain(node_idx, graph_idx=graph_idx) for node_idx in node_indices
         ]
@@ -356,51 +290,6 @@ class Explainer:
 
         return masked_adjs
 
-    def make_pred_real(self, adj, start):
-        # house graph
-        if self.args.dataset == "syn1" or self.args.dataset == "syn2":
-            # num_pred = max(G.number_of_edges(), 6)
-            pred = adj[np.triu(adj) > 0]
-            real = adj.copy()
-
-            if real[start][start + 1] > 0:
-                real[start][start + 1] = 10
-            if real[start + 1][start + 2] > 0:
-                real[start + 1][start + 2] = 10
-            if real[start + 2][start + 3] > 0:
-                real[start + 2][start + 3] = 10
-            if real[start][start + 3] > 0:
-                real[start][start + 3] = 10
-            if real[start][start + 4] > 0:
-                real[start][start + 4] = 10
-            if real[start + 1][start + 4]:
-                real[start + 1][start + 4] = 10
-            real = real[np.triu(real) > 0]
-            real[real != 10] = 0
-            real[real == 10] = 1
-
-        # cycle graph
-        elif self.args.dataset == "syn4":
-            pred = adj[np.triu(adj) > 0]
-            real = adj.copy()
-            # pdb.set_trace()
-            if real[start][start + 1] > 0:
-                real[start][start + 1] = 10
-            if real[start + 1][start + 2] > 0:
-                real[start + 1][start + 2] = 10
-            if real[start + 2][start + 3] > 0:
-                real[start + 2][start + 3] = 10
-            if real[start + 3][start + 4] > 0:
-                real[start + 3][start + 4] = 10
-            if real[start + 4][start + 5] > 0:
-                real[start + 4][start + 5] = 10
-            if real[start][start + 5]:
-                real[start][start + 5] = 10
-            real = real[np.triu(real) > 0]
-            real[real != 10] = 0
-            real[real == 10] = 1
-
-        return pred, real
 
     def explain_nodes_gnn_stats(self, node_indices, args, graph_idx=0, model="exp"):
         masked_adjs = [
@@ -533,7 +422,11 @@ class Explainer:
 
         return masked_adjs
 
+    # GRAPH EXPLAINER
     def explain_graphs(self, graph_indices):
+        """
+        Explain graphs.
+        """
         masked_adjs = []
 
         for graph_idx in graph_indices:
@@ -562,7 +455,7 @@ class Explainer:
                 threshold=None,
                 max_component=False,
             )
-            # G_orig = nx.from_numpy_matrix(self.adj[graph_idx].cpu().detach().numpy())
+
             io_utils.log_graph(
                 self.writer,
                 G_orig,
@@ -577,6 +470,9 @@ class Explainer:
         return masked_adjs
 
     def log_representer(self, rep_val, sim_val, alpha, graph_idx=0):
+        """
+        TODO
+        """
         rep_val = rep_val.cpu().detach().numpy()
         sim_val = sim_val.cpu().detach().numpy()
         alpha = alpha.cpu().detach().numpy()
@@ -635,6 +531,121 @@ class Explainer:
         self.writer.add_image(
             "local/representer_neigh", tensorboardX.utils.figure_to_image(fig), 0
         )
+
+
+    # Utilities
+    def representer(self):
+        """
+        TODO
+        """
+        self.model.train()
+        self.model.zero_grad()
+        adj = torch.tensor(self.adj, dtype=torch.float)
+        x = torch.tensor(self.feat, requires_grad=True, dtype=torch.float)
+        label = torch.tensor(self.label, dtype=torch.long)
+        if self.args.gpu:
+            adj, x, label = adj.cuda(), x.cuda(), label.cuda()
+
+        preds, _ = self.model(x, adj)
+        preds.retain_grad()
+        self.embedding = self.model.embedding_tensor
+        loss = self.model.loss(preds, label)
+        loss.backward()
+        self.preds_grad = preds.grad
+        pred_idx = np.expand_dims(np.argmax(self.pred, axis=2), axis=2)
+        pred_idx = torch.LongTensor(pred_idx)
+        if self.args.gpu:
+            pred_idx = pred_idx.cuda()
+        self.alpha = self.preds_grad
+
+    def extract_neighborhood(self, node_idx, graph_idx=0):
+        """Returns the neighborhood of a given ndoe."""
+        neighbors_adj_row = self.neighborhoods[graph_idx][node_idx, :]
+        # index of the query node in the new adj
+        node_idx_new = sum(neighbors_adj_row[:node_idx])
+        neighbors = np.nonzero(neighbors_adj_row)[0]
+        sub_adj = self.adj[graph_idx][neighbors][:, neighbors]
+        sub_feat = self.feat[graph_idx, neighbors]
+        sub_label = self.label[graph_idx][neighbors]
+        return node_idx_new, sub_adj, sub_feat, sub_label, neighbors
+
+    def align(
+        self, ref_feat, ref_adj, ref_node_idx, curr_feat, curr_adj, curr_node_idx, args
+    ):
+        """ Tries to find an alignment between two graphs. 
+        """
+        ref_adj = torch.FloatTensor(ref_adj)
+        curr_adj = torch.FloatTensor(curr_adj)
+
+        ref_feat = torch.FloatTensor(ref_feat)
+        curr_feat = torch.FloatTensor(curr_feat)
+
+        P = nn.Parameter(torch.FloatTensor(ref_adj.shape[0], curr_adj.shape[0]))
+        with torch.no_grad():
+            nn.init.constant_(P, 1.0 / ref_adj.shape[0])
+            P[ref_node_idx, :] = 0.0
+            P[:, curr_node_idx] = 0.0
+            P[ref_node_idx, curr_node_idx] = 1.0
+        opt = torch.optim.Adam([P], lr=0.01, betas=(0.5, 0.999))
+        for i in range(args.align_steps):
+            opt.zero_grad()
+            feat_loss = torch.norm(P @ curr_feat - ref_feat)
+
+            aligned_adj = P @ curr_adj @ torch.transpose(P, 0, 1)
+            align_loss = torch.norm(aligned_adj - ref_adj)
+            loss = feat_loss + align_loss
+            loss.backward()  # Calculate gradients
+            self.writer.add_scalar("optimization/align_loss", loss, i)
+            print("iter: ", i, "; loss: ", loss)
+            opt.step()
+
+        return P, aligned_adj, P @ curr_feat
+
+    def make_pred_real(self, adj, start):
+        # house graph
+        if self.args.dataset == "syn1" or self.args.dataset == "syn2":
+            # num_pred = max(G.number_of_edges(), 6)
+            pred = adj[np.triu(adj) > 0]
+            real = adj.copy()
+
+            if real[start][start + 1] > 0:
+                real[start][start + 1] = 10
+            if real[start + 1][start + 2] > 0:
+                real[start + 1][start + 2] = 10
+            if real[start + 2][start + 3] > 0:
+                real[start + 2][start + 3] = 10
+            if real[start][start + 3] > 0:
+                real[start][start + 3] = 10
+            if real[start][start + 4] > 0:
+                real[start][start + 4] = 10
+            if real[start + 1][start + 4]:
+                real[start + 1][start + 4] = 10
+            real = real[np.triu(real) > 0]
+            real[real != 10] = 0
+            real[real == 10] = 1
+
+        # cycle graph
+        elif self.args.dataset == "syn4":
+            pred = adj[np.triu(adj) > 0]
+            real = adj.copy()
+            # pdb.set_trace()
+            if real[start][start + 1] > 0:
+                real[start][start + 1] = 10
+            if real[start + 1][start + 2] > 0:
+                real[start + 1][start + 2] = 10
+            if real[start + 2][start + 3] > 0:
+                real[start + 2][start + 3] = 10
+            if real[start + 3][start + 4] > 0:
+                real[start + 3][start + 4] = 10
+            if real[start + 4][start + 5] > 0:
+                real[start + 4][start + 5] = 10
+            if real[start][start + 5]:
+                real[start][start + 5] = 10
+            real = real[np.triu(real) > 0]
+            real[real != 10] = 0
+            real[real == 10] = 1
+
+        return pred, real
 
 
 class ExplainModule(nn.Module):
