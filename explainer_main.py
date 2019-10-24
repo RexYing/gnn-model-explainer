@@ -1,17 +1,23 @@
-import sklearn.metrics as metrics
-from tensorboardX import SummaryWriter
+""" explainer_main.py
 
-
+     Main user interface for the explainer module.
+"""
 import argparse
 import os
+
+import sklearn.metrics as metrics
+
+from tensorboardX import SummaryWriter
+
 import pickle
 import shutil
 import torch
 
+import models
 import utils.io_utils as io_utils
 import utils.parser_utils as parser_utils
-import models
 from explainer import explain
+
 
 
 def arg_parse():
@@ -26,6 +32,7 @@ def arg_parse():
 
     parser_utils.parse_optimizer(parser)
 
+    parser.add_argument("--clean-log", action="store_true", help="If true, cleans the specified log directory before running.")
     parser.add_argument("--logdir", dest="logdir", help="Tensorboard log directory")
     parser.add_argument("--ckptdir", dest="ckptdir", help="Model checkpoint directory")
     parser.add_argument("--cuda", dest="cuda", help="CUDA.")
@@ -132,6 +139,7 @@ def arg_parse():
         help="suffix added to the explainer log",
     )
 
+    # TODO: Check argument usage
     parser.set_defaults(
         logdir="log",
         ckptdir="ckpt",
@@ -161,6 +169,7 @@ def arg_parse():
 
 
 def main():
+    # Load a configuration
     prog_args = arg_parse()
 
     if prog_args.gpu:
@@ -169,21 +178,26 @@ def main():
     else:
         print("Using CPU")
 
+    # Configure the logging directory 
     if prog_args.writer:
         path = os.path.join(prog_args.logdir, io_utils.gen_explainer_prefix(prog_args))
-        # if os.path.isdir(path):
-        #    print('Remove existing log dir: ', path)
-        #    shutil.rmtree(path)
+        if os.path.isdir(path) and prog_args.clean_log:
+           print('Removing existing log dir: ', path)
+           if not input("Are you sure you want to remove this directory? (y/n): ").lower().strip()[:1] == "y": sys.exit(1)
+           shutil.rmtree(path)
         writer = SummaryWriter(path)
     else:
         writer = None
 
+    # Load a model checkpoint
     ckpt = io_utils.load_ckpt(prog_args)
-    cg_dict = ckpt["cg"]
-    input_dim = cg_dict["feat"].shape[2]
+    cg_dict = ckpt["cg"] # get computation graph
+    input_dim = cg_dict["feat"].shape[2] 
     num_classes = cg_dict["pred"].shape[2]
+    print("Loaded model from {}".format(prog_args.ckptdir))
     print("input dim: ", input_dim, "; num classes: ", num_classes)
 
+    # Determine explainer mode
     graph_mode = (
         prog_args.graph_mode
         or prog_args.multigraph_class >= 0
@@ -192,46 +206,52 @@ def main():
 
     # build model
     print("Method: ", prog_args.method)
-    if graph_mode:
+    if graph_mode: 
+        # Explain Graph prediction
         model = models.GcnEncoderGraph(
-            input_dim,
-            prog_args.hidden_dim,
-            prog_args.output_dim,
-            num_classes,
-            prog_args.num_gc_layers,
+            input_dim=input_dim,
+            hidden_dim=prog_args.hidden_dim,
+            embedding_dim=prog_args.output_dim,
+            label_dim=num_classes,
+            num_layers=prog_args.num_gc_layers,
             bn=prog_args.bn,
             args=prog_args,
         )
     else:
         if prog_args.dataset == "ppi_essential":
-            prog_args.loss_weight = torch.tensor([1, 5.0], dtype=torch.float).cuda()
+            prog_args.loss_weight = torch.tensor([1.0, 5.0], dtype=torch.float).cuda() # TODO: what is this for?
+        # Explain Node prediction
         model = models.GcnEncoderNode(
-            input_dim,
-            prog_args.hidden_dim,
-            prog_args.output_dim,
-            num_classes,
-            prog_args.num_gc_layers,
+            input_dim=input_dim,
+            hidden_dim=prog_args.hidden_dim,
+            embedding_dim=prog_args.output_dim,
+            label_dim=num_classes,
+            num_layers=prog_args.num_gc_layers,
             bn=prog_args.bn,
             args=prog_args,
         )
     if prog_args.gpu:
         model = model.cuda()
-    model.load_state_dict(ckpt["model_state"])
+    model.load_state_dict(ckpt["model_state"]) # TODO: Is this a standard model attribute? If we want to make the model generic enough we might need to work on this
 
+    # Create explainer
     explainer = explain.Explainer(
-        model,
-        cg_dict["adj"],
-        cg_dict["feat"],
-        cg_dict["label"],
-        cg_dict["pred"],
-        cg_dict["train_idx"],
-        prog_args,
+        model=model,
+        adj=cg_dict["adj"],
+        feat=cg_dict["feat"],
+        label=cg_dict["label"],
+        pred=cg_dict["pred"],
+        train_idx=cg_dict["train_idx"],
+        args=prog_args,
         writer=writer,
         print_training=True,
         graph_mode=graph_mode,
         graph_idx=prog_args.graph_idx,
     )
-    train_idx = cg_dict["train_idx"]
+
+    # TODO: API should definitely be cleaner
+    # Let's define exactly which modes we support 
+    # We could even move each mode to a different method (even file)
     if prog_args.explain_node is not None:
         explainer.explain(prog_args.explain_node, unconstrained=False)
     elif graph_mode:
