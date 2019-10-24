@@ -21,7 +21,7 @@ from explainer import explain
 
 
 def arg_parse():
-    parser = argparse.ArgumentParser(description="GraphPool arguments.")
+    parser = argparse.ArgumentParser(description="GNN Explainer arguments.")
     io_parser = parser.add_mutually_exclusive_group(required=False)
     io_parser.add_argument("--dataset", dest="dataset", help="Input dataset.")
     benchmark_parser = io_parser.add_argument_group()
@@ -128,7 +128,7 @@ def arg_parse():
     )
 
     parser.add_argument(
-        "--method", dest="method", type=str, help="Method. Possible values: base, att"
+        "--method", dest="method", type=str, help="Method. Possible values: base, att."
     )
     parser.add_argument(
         "--name-suffix", dest="name_suffix", help="suffix added to the output filename"

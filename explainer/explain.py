@@ -32,7 +32,6 @@ import utils.io_utils as io_utils
 import utils.train_utils as train_utils
 
 
-
 # import models_gcn.GCN as GCN
 from models_gcn import (
     GCN,
@@ -141,26 +140,27 @@ class Explainer:
             )
             print("neigh graph idx: ", node_idx, node_idx_new)
             sub_label = np.expand_dims(sub_label, axis=0)
+        
         sub_adj = np.expand_dims(sub_adj, axis=0)
         sub_feat = np.expand_dims(sub_feat, axis=0)
 
-        adj = torch.tensor(sub_adj, dtype=torch.float)
-        x = torch.tensor(sub_feat, requires_grad=True, dtype=torch.float)
+        adj   = torch.tensor(sub_adj, dtype=torch.float)
+        x     = torch.tensor(sub_feat, requires_grad=True, dtype=torch.float)
         label = torch.tensor(sub_label, dtype=torch.long)
 
         if self.graph_mode:
             pred_label = np.argmax(self.pred[0][graph_idx], axis=0)
-            print("pred label: ", pred_label)
+            print("Graph predicted label: ", pred_label)
         else:
             pred_label = np.argmax(self.pred[graph_idx][neighbors], axis=1)
-            print("pred label: ", pred_label[node_idx_new])
+            print("Node predicted label: ", pred_label[node_idx_new])
 
         explainer = ExplainModule(
-            adj,
-            x,
-            self.model,
-            label,
-            self.args,
+            adj=adj,
+            x=x,
+            model=self.model,
+            label=label,
+            args=self.args,
             writer=self.writer,
             graph_idx=self.graph_idx,
             graph_mode=self.graph_mode,
@@ -169,6 +169,7 @@ class Explainer:
             explainer = explainer.cuda()
 
         self.model.eval()
+
 
         # gradient baseline
         if model == "grad":
@@ -180,7 +181,6 @@ class Explainer:
             masked_adj = adj_grad + adj_grad.t()
             masked_adj = nn.functional.sigmoid(masked_adj)
             masked_adj = masked_adj.cpu().detach().numpy() * sub_adj.squeeze()
-
         else:
             explainer.train()
             begin_time = time.time()
@@ -402,7 +402,7 @@ class Explainer:
 
         return pred, real
 
-    def explain_nodes_gnn_stats(self, node_indices, args, graph_idx=0, model="grad"):
+    def explain_nodes_gnn_stats(self, node_indices, args, graph_idx=0, model="exp"):
         masked_adjs = [
             self.explain(node_idx, graph_idx=graph_idx, model=model)
             for node_idx in node_indices
@@ -577,7 +577,6 @@ class Explainer:
         return masked_adjs
 
     def log_representer(self, rep_val, sim_val, alpha, graph_idx=0):
-
         rep_val = rep_val.cpu().detach().numpy()
         sim_val = sim_val.cpu().detach().numpy()
         alpha = alpha.cpu().detach().numpy()
@@ -652,7 +651,6 @@ class ExplainModule(nn.Module):
         graph_mode=False,
     ):
         super(ExplainModule, self).__init__()
-        print("Neighborhood size: ", adj.size())
         self.adj = adj
         self.x = x
         self.model = model
@@ -689,12 +687,6 @@ class ExplainModule(nn.Module):
             "grad": 0,
             "lap": 1.0,
         }
-
-        # ypred = self.model(x, adj)[graph_idx][node_idx]
-        # print('rerun pred: ', ypred)
-        # masked_adj = adj * self.mask
-        # ypred = self.model(x, masked_adj)
-        # print('init mask pred: ', ypred[graph_idx][node_idx])
 
     def construct_feat_mask(self, feat_dim, init_strategy="normal"):
         mask = nn.Parameter(torch.FloatTensor(feat_dim))
@@ -779,7 +771,6 @@ class ExplainModule(nn.Module):
         else:
             node_pred = ypred[self.graph_idx, node_idx, :]
             res = nn.Softmax(dim=0)(node_pred)
-        # return res
         return res, adj_att
 
     def adj_feat_grad(self, node_idx, pred_label_node):
@@ -803,7 +794,6 @@ class ExplainModule(nn.Module):
         logit = logit[pred_label_node]
         loss = -torch.log(logit)
         loss.backward()
-        # return (self.adj.grad+self.adj.grad.permute(0, 2, 1)) / 2
         return self.adj.grad, self.x.grad
 
     def loss(self, pred, pred_label, node_idx, epoch):
@@ -838,7 +828,7 @@ class ExplainModule(nn.Module):
         mask_ent = -mask * torch.log(mask) - (1 - mask) * torch.log(1 - mask)
         mask_ent_loss = self.coeffs["ent"] * torch.mean(mask_ent)
 
-        feat_mask_ent = -feat_mask              \
+        feat_mask_ent = - feat_mask             \
                         * torch.log(feat_mask)  \
                         - (1 - feat_mask)       \
                         * torch.log(1 - feat_mask)
