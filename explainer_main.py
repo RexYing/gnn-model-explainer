@@ -306,20 +306,9 @@ def main():
 
         else:
             # explain a set of nodes
-            # masked_adj = explainer.explain_nodes([370,390], prog_args)
-            # masked_adj = explainer.explain_nodes_gnn_cluster([370,390], prog_args)
-            # masked_adj = explainer.explain_nodes_gnn_cluster(range(400, 700, 5), prog_args)
             masked_adj = explainer.explain_nodes_gnn_stats(
                 range(400, 700, 5), prog_args
             )
-            # pickle.dump(masked_adj, open('out/masked_adjs.pkl', 'wb'))
-        # explain a set of nodes
-        # masked_adj = explainer.explain_nodes([370,390], prog_args)
-        # masked_adj = explainer.explain_nodes_gnn_cluster([370,390], prog_args)
-        # masked_adj = explainer.explain_nodes_gnn_cluster(range(400, 700, 5), prog_args)
-        # masked_adj = explainer.explain_nodes_gnn_stats(range(511, 811, 6), prog_args)
-        # pickle.dump(masked_adj, open('out/masked_adjs.pkl', 'wb'))
-
 
 if __name__ == "__main__":
     main()
