@@ -71,6 +71,23 @@ tensorboard --logdir log
 
 You should then have access to visualizations served from `localhost`.
 
+#### Jupyter Notebook
+
+We provide an example visualization through Jupyter Notebooks in the `notebook` folder. To try it:
+
+```
+jupyter notebook
+```
+
+The default visualizations are provided in `notebook/GNN-Explainer-Viz.ipynb`.
+
+> Note: For an interactive version, you must enable ipywidgets
+>
+> ```
+> jupyter nbextension enable --py widgetsnbextension
+> ```
+
+You can now play around with the mask threshold in the `GNN-Explainer-Viz-interactive.ipynb`.
 > TODO: Explain outputs + visualizations + baselines
 
 #### Included experiments
