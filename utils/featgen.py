@@ -14,9 +14,9 @@ class ConstFeatureGen(FeatureGen):
 
     def gen_node_features(self, G):
         feat_dict = {i:{'feat': np.array(self.val, dtype=np.float32)} for i in G.nodes()}
-        print ('feat_dict[0]["feat"]:', feat_dict[0]['feat'].dtype)
+        # print ('feat_dict[0]["feat"]:', feat_dict[0]['feat'].dtype)
         nx.set_node_attributes(G, feat_dict)
-        print ('G.node[0]["feat"]:', G.node[0]['feat'].dtype)
+        # print ('G.node[0]["feat"]:', G.node[0]['feat'].dtype)
 
 class GaussianFeatureGen(FeatureGen):
     def __init__(self, mu, sigma):
@@ -28,7 +28,7 @@ class GaussianFeatureGen(FeatureGen):
 
     def gen_node_features(self, G):
         feat = np.random.multivariate_normal(self.mu, self.sigma, G.number_of_nodes())
-        feat_dict = {i:{'feat': feat[i]} for i in range(feat.shape[0])}
+        feat_dict = {i:{'feat': np.array(feat[i], dtype=np.float32)} for i in range(feat.shape[0])}
         nx.set_node_attributes(G, feat_dict)
 
 class GridFeatureGen(FeatureGen):
