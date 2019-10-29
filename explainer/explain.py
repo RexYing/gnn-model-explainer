@@ -219,7 +219,7 @@ class Explainer:
                 masked_adj = adj_atts.cpu().detach().numpy() * sub_adj.squeeze()
 
         fname = 'masked_adj_'+io_utils.gen_explainer_prefix(self.args)+'node_idx_'+node_idx+'graph_idx_'+self.graph_idx+'.npy'
-        with open(os.path.join(self.writer.logdir, ), 'wb') as outfile:
+        with open(os.path.join(self.writer.logdir, fname), 'wb') as outfile:
             np.save(outfile, np.asarray(masked_adj.copy()))
             print("Saved adjacency matrix to ", fname)
         return masked_adj
