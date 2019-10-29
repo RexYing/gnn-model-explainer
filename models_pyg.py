@@ -35,18 +35,27 @@ class GCNNet(torch.nn.Module):
         self.dropout = dropout
         self.act = F.relu
 
-        conv_model = MyConv
-
         self.convs = torch.nn.ModuleList()
-        self.convs.append(conv_model(self.input_dim, self.hidden_dim))
+        self.convs.append(self.build_conv_model(self.input_dim, self.hidden_dim))
         for layer in range(self.num_layers - 2):
-            self.convs.append(conv_model(self.hidden_dim, self.hidden_dim))
-        self.convs.append(conv_model(self.hidden_dim, embedding_dim))
+            self.convs.append(self.build_conv_model(self.hidden_dim, self.hidden_dim))
+        self.convs.append(self.build_conv_model(self.hidden_dim, embedding_dim))
 
         self.pred_model = self.build_pred_layers(self.pred_input_dim, pred_hidden_dims, 
                 self.label_dim)
 
         print ('len(self.convs):', len(self.convs))
+
+    def build_conv_model(self, input_dim, output_dim):
+        args = self.args
+        if args.method == 'base': # sage with add agg
+            conv_model = MyConv(input_dim, output_dim)
+        elif args.method == 'gcn':
+            conv_model = pyg_nn.GCNConv(input_dim, output_dim)
+        elif args.method == 'gin':
+            conv_model = pyg_nn.GINConv(nn.Sequential(nn.Linear(input_dim, output_dim),
+                                  nn.ReLU(), nn.Linear(output_dim, output_dim)))
+        return conv_model
 
     def build_pred_layers(self, pred_input_dim, pred_hidden_dims, label_dim):
         pred_input_dim = pred_input_dim
