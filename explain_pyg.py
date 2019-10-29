@@ -1,17 +1,20 @@
-import gengraph
 import random
-import torch_geometric
-from utils import featgen
+import os
+
 import numpy as np
-import utils.io_utils as io_utils
-from configs import arg_parse
+import torch_geometric
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
-from models_pyg import GCNNet
-import os
 from torch_geometric.utils import from_networkx
 from tensorboardX import SummaryWriter
+
+from configs import arg_parse
+import gengraph
+from models_pyg import GCNNet
+import utils.io_utils as io_utils
+from utils import featgen
+import utils.train_utils as train_utils
 
 def test(loader, model, args, labels, test_mask):
     model.eval()
@@ -40,15 +43,19 @@ def test(loader, model, args, labels, test_mask):
 def syn_task1(args, writer=None):
     # data
     print ('Generating graph.')
-    """G, labels, name = gengraph.gen_syn1(
-           feature_generator=featgen.ConstFeatureGen(np.ones(args.input_dim, dtype=float)))"""
-    """G, labels, name = gengraph.gen_syn2()"""
-    G, labels, name = gengraph.gen_syn3(
-            feature_generator=featgen.ConstFeatureGen(np.ones(args.input_dim, dtype=float)))
-    """G, labels, name = gengraph.gen_syn4(
-            feature_generator=featgen.ConstFeatureGen(np.ones(args.input_dim, dtype=float)))"""
-    """G, labels, name = gengraph.gen_syn5(
-            feature_generator=featgen.ConstFeatureGen(np.ones(args.input_dim, dtype=float)))"""
+    feature_generator=featgen.ConstFeatureGen(np.ones(args.input_dim, dtype=float))
+    if args.dataset == 'syn1':
+        gen_fn = gengraph.gen_syn1
+    elif args.dataset == 'syn2':
+        gen_fn = gengraph.gen_syn2
+        feature_generator = None
+    elif args.dataset == 'syn3':
+        gen_fn = gengraph.gen_syn3
+    elif args.dataset == 'syn4':
+        gen_fn = gengraph.gen_syn4
+    elif args.dataset == 'syn5':
+        gen_fn = gengraph.gen_syn5
+    G, labels, name = gen_fn(feature_generator=feature_generator)
     # print ('G.node[0]:', G.node[0]['feat'].dtype)
     # print ('Original labels:', labels)
     pyg_G = from_networkx(G)
@@ -83,6 +90,8 @@ def syn_task1(args, writer=None):
 
     loader = torch_geometric.data.DataLoader([pyg_G], batch_size=1)
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
+    scheduler, opt = train_utils.build_optimizer(args, model.parameters(),
+            weight_decay=args.weight_decay)
     for epoch in range(args.num_epochs):
         model.train()
         total_loss = 0
@@ -97,12 +106,11 @@ def syn_task1(args, writer=None):
             label = labels[train_mask]
             # print ('train label:', labels_train)
             loss = model.loss(pred, label)
-            # print ('loss:', loss)
             loss.backward()
-            torch.nn.utils.clip_grad_norm(model.parameters(), args.clip)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip)
             opt.step()
             total_loss += loss.item() * 1
-            # print ('Loss:', loss)
+            #print ('Loss:', loss)
         # total_loss /= num_train
         writer.add_scalar("loss", total_loss, epoch)
         
@@ -113,5 +121,5 @@ def syn_task1(args, writer=None):
             writer.add_scalar("test", test_acc, epoch)
 
 prog_args = arg_parse()
-path = os.path.join(prog_args.logdir, io_utils.gen_prefix(prog_args))
+path = os.path.join(prog_args.logdir, io_utils.gen_prefix(prog_args) + '_pyg')
 syn_task1(prog_args, writer=SummaryWriter(path))

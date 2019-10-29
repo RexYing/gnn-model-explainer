@@ -2,11 +2,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch_geometric.transforms as T
-from torch_geometric.nn import GCNConv, GATConv
+import torch_geometric.nn as pyg_nn
+import torch_geometric.utils as pyg_utils
 
 class GCNNet(torch.nn.Module):
     def __init__(self, input_dim, hidden_dim, embedding_dim, label_dim, num_layers,
-            pred_hidden_dims=[], concat=True, bn=True, dropout=0.0, add_self=False, args=None):
+            pred_hidden_dims=[], concat=False, bn=True, dropout=0.0, add_self=False, args=None):
         super(GCNNet, self).__init__()
         self.input_dim = input_dim
         print ('GCNNet input_dim:', self.input_dim)
@@ -34,11 +35,13 @@ class GCNNet(torch.nn.Module):
         self.dropout = dropout
         self.act = F.relu
 
+        conv_model = MyConv
+
         self.convs = torch.nn.ModuleList()
-        self.convs.append(GCNConv(self.input_dim, self.hidden_dim))
+        self.convs.append(conv_model(self.input_dim, self.hidden_dim))
         for layer in range(self.num_layers - 2):
-            self.convs.append(GCNConv(self.hidden_dim, self.hidden_dim))
-        self.convs.append(GCNConv(self.hidden_dim, embedding_dim))
+            self.convs.append(conv_model(self.hidden_dim, self.hidden_dim))
+        self.convs.append(conv_model(self.hidden_dim, embedding_dim))
 
         self.pred_model = self.build_pred_layers(self.pred_input_dim, pred_hidden_dims, 
                 self.label_dim)
@@ -68,7 +71,10 @@ class GCNNet(torch.nn.Module):
             if i != self.num_layers - 1:
                 x = F.relu(x)
             x_all.append(x)
-        x_tensor = torch.cat(x_all, dim=1)
+        if self.concat:
+            x_tensor = torch.cat(x_all, dim=1)
+        else:
+            x_tensor = x
         return self.pred_model(x_tensor)
 
     def loss(self, pred, label):
@@ -77,3 +83,32 @@ class GCNNet(torch.nn.Module):
         label = label.view((1, label.shape[0]))
         # print(pred)
         return F.cross_entropy(pred, label, size_average=True)
+
+class MyConv(pyg_nn.MessagePassing):
+    def __init__(self, in_channels, out_channels):
+        super(MyConv, self).__init__(aggr='add')  # "Add" aggregation.
+        self.lin = nn.Linear(in_channels, out_channels)
+        self.lin_update = nn.Linear(out_channels + in_channels, out_channels)
+
+    def forward(self, x, edge_index):
+        # x has shape [N, in_channels]
+        # edge_index has shape [2, E]
+
+        edge_index, _ = pyg_utils.remove_self_loops(edge_index)
+
+        # Transform node feature matrix.
+        #self_x = self.lin_self(x)
+
+        return self.propagate(edge_index, size=(x.size(0), x.size(0)), x=x)
+
+    def message(self, x_i, x_j, edge_index, size):
+        # Compute messages
+        # x_j has shape [E, out_channels]
+        return self.lin(x_j)
+
+    def update(self, aggr_out, x):
+        # aggr_out has shape [N, out_channels]
+        out = torch.cat((aggr_out, x), dim=1)
+        out = self.lin_update(out)
+        return out
+
