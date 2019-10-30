@@ -90,12 +90,31 @@ The default visualizations are provided in `notebook/GNN-Explainer-Viz.ipynb`.
 You can now play around with the mask threshold in the `GNN-Explainer-Viz-interactive.ipynb`.
 > TODO: Explain outputs + visualizations + baselines
 
+#### D3,js
+
+We provide export functionality so the generated masks can be visualized in other data visualization 
+frameworks, for example [d3.js](http://observablehq.com). We provide [an example visualization in Observable](https://observablehq.com/d/00c5dc74f359e7a1).
+
 #### Included experiments
 
 | Name     | `EXPERIMENT_NAME` | Description  |
 |----------|:-------------------:|--------------|
-| Synthetic #1 | `syn1`  | The first synthetic experiment -- a random BA graph with House attachments.  |
-| TODO | TODO  | TODO | 
+| Synthetic #1 | `syn1`  | Random BA graph with House attachments.  |
+| Synthetic #2 | `syn2`  | Random BA graph with community features. | 
+| Synthetic #3 | `syn3`  | Random BA graph with Cycle attachments.  |
+| Synthetic #4 | `syn4`  | Random Tree with Cycle attachments. |
+| Synthetic #5 | `syn5`  | Random Tree with grid attachments. | 
+| Enron        | `enron` | Enron email dataset [source](https://www.cs.cmu.edu/~enron/). |
+| PPI          | `ppi_essential` | Protein-Protein interaction dataset. |
+| | | |
+| Mutagenicity*      | `mutagenicity`  | Predicting the mutagenicity of molecules ([source](https://ls11-www.cs.tu-dortmund.de/staff/morris/graphkerneldatasets)). |
+| Proteins*      | `proteins`  | Protein-Protein interaction ([source](https://ls11-www.cs.tu-dortmund.de/staff/morris/graphkerneldatasets)). |
+| Tox 21*      | `Tox21_AHR`  | Predicting a compound's toxicity ([source](https://ls11-www.cs.tu-dortmund.de/staff/morris/graphkerneldatasets)). |
+
+> Datasets with a * are passed with the `--bmname` parameter rather than `--dataset` as they require being downloaded manually.
+
+> TODO: Provide all data for experiments packaged so we don't have to split the two.
+
 
 ### Using the explainer on other models
 
