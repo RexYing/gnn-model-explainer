@@ -120,6 +120,22 @@ def syn_task1(args, writer=None):
                 epoch, total_loss, test_acc))
             writer.add_scalar("test", test_acc, epoch)
 
+    data = gengraph.preprocess_input_graph(G, labels)
+    adj = torch.tensor(data['adj'], dtype=torch.float)
+    x = torch.tensor(data['feat'], requires_grad=True, dtype=torch.float)
+
+    # computation graph
+    model.eval()
+    ypred = model(batch)
+    cg_data = {'adj': data['adj'],
+                'feat': data['feat'],
+                'label': data['labels'],
+                'pred': ypred.cpu().detach().numpy(),
+                'train_idx': train_mask}
+    # import pdb
+    # pdb.set_trace()
+    io_utils.save_checkpoint(model, opt, args, num_epochs=-1, cg_dict=cg_data)
+
 prog_args = arg_parse()
 path = os.path.join(prog_args.logdir, io_utils.gen_prefix(prog_args) + '_pyg')
 syn_task1(prog_args, writer=SummaryWriter(path))
