@@ -25,6 +25,7 @@ from torch.autograd import Variable
 
 from tensorboardX import SummaryWriter
 
+import configs
 import gengraph
 
 import utils.math_utils as math_utils
@@ -968,40 +969,22 @@ def benchmark_task_val(args, writer=None, feat="node-label"):
         for G in graphs:
             featgen_const.gen_node_features(G)
 
+    # 10 splits
     for i in range(10):
         train_dataset, val_dataset, max_num_nodes, input_dim, assign_input_dim = cross_val.prepare_val_data(
             graphs, args, i, max_nodes=args.max_nodes
         )
-        if args.method == "soft-assign":
-            print("Method: soft-assign")
-            model = models.SoftPoolingGcnEncoder(
-                max_num_nodes,
-                input_dim,
-                args.hidden_dim,
-                args.output_dim,
-                args.num_classes,
-                args.num_gc_layers,
-                args.hidden_dim,
-                assign_ratio=args.assign_ratio,
-                num_pooling=args.num_pool,
-                bn=args.bn,
-                dropout=args.dropout,
-                linkpred=args.linkpred,
-                args=args,
-                assign_input_dim=assign_input_dim,
-            ).cuda()
-        else:
-            print("Method: base")
-            model = models.GcnEncoderGraph(
-                input_dim,
-                args.hidden_dim,
-                args.output_dim,
-                args.num_classes,
-                args.num_gc_layers,
-                bn=args.bn,
-                dropout=args.dropout,
-                args=args,
-            ).cuda()
+        print("Method: base")
+        model = models.GcnEncoderGraph(
+            input_dim,
+            args.hidden_dim,
+            args.output_dim,
+            args.num_classes,
+            args.num_gc_layers,
+            bn=args.bn,
+            dropout=args.dropout,
+            args=args,
+        ).cuda()
 
         _, val_accs = train(
             train_dataset,
@@ -1172,7 +1155,7 @@ def arg_parse():
 
 
 def main():
-    prog_args = arg_parse()
+    prog_args = configs.arg_parse()
 
     path = os.path.join(prog_args.logdir, io_utils.gen_prefix(prog_args))
     writer = SummaryWriter(path)
