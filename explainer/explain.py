@@ -213,7 +213,8 @@ class Explainer:
                 adj_atts = nn.functional.sigmoid(adj_atts).squeeze()
                 masked_adj = adj_atts.cpu().detach().numpy() * sub_adj.squeeze()
 
-        fname = 'masked_adj_'+io_utils.gen_explainer_prefix(self.args)+'node_idx_'+node_idx+'graph_idx_'+self.graph_idx+'.npy'
+        fname = 'masked_adj_' + io_utils.gen_explainer_prefix(self.args) + (
+                'node_idx_'+str(node_idx)+'graph_idx_'+str(self.graph_idx)+'.npy')
         with open(os.path.join(self.writer.logdir, fname), 'wb') as outfile:
             np.save(outfile, np.asarray(masked_adj.copy()))
             print("Saved adjacency matrix to ", fname)
@@ -840,7 +841,6 @@ class ExplainModule(nn.Module):
         io_utils.log_matrix(
             self.writer, torch.sigmoid(self.feat_mask), "mask/feat_mask", epoch
         )
-        # print(self.feat_mask,  'FEAT MASK ----------------')
 
         fig = plt.figure(figsize=(4, 3), dpi=400)
         # use [0] to remove the batch dim
@@ -868,6 +868,8 @@ class ExplainModule(nn.Module):
             )
 
     def log_adj_grad(self, node_idx, pred_label, epoch, label=None):
+        log_adj = False
+
         if self.graph_mode:
             predicted_label = pred_label
             # adj_grad, x_grad = torch.abs(self.adj_feat_grad(node_idx, predicted_label)[0])[0]
@@ -882,29 +884,32 @@ class ExplainModule(nn.Module):
             x_grad = x_grad[self.graph_idx][node_idx][:, np.newaxis]
             # x_grad = torch.sum(x_grad[self.graph_idx], 0, keepdim=True).t()
         adj_grad = (adj_grad + adj_grad.t()) / 2
-        io_utils.log_matrix(self.writer, adj_grad, "grad/adj", epoch)
         adj_grad = (adj_grad * self.adj).squeeze()
-        io_utils.log_matrix(self.writer, adj_grad, "grad/adj1", epoch)
-        # self.adj.requires_grad = False
-        io_utils.log_matrix(self.writer, self.adj.squeeze(), "grad/adj_orig", epoch)
+        if log_adj:
+            io_utils.log_matrix(self.writer, adj_grad, "grad/adj_masked", epoch)
+            self.adj.requires_grad = False
+            io_utils.log_matrix(self.writer, self.adj.squeeze(), "grad/adj_orig", epoch)
 
         masked_adj = self.masked_adj[0].cpu().detach().numpy()
-        G = io_utils.denoise_graph(
-            masked_adj, node_idx, feat=self.x[0], threshold=None, max_component=False
-        )
-        io_utils.log_graph(
-            self.writer,
-            G,
-            name="grad/graph_orig",
-            epoch=epoch,
-            identify_self=False,
-            label_node_feat=True,
-            nodecolor="feat",
-            edge_vmax=None,
-            args=self.args,
-        )
+
+        # only for graph mode since many node neighborhoods for syn tasks are relatively large for
+        # visualization
+        if self.graph_mode:
+            G = io_utils.denoise_graph(
+                masked_adj, node_idx, feat=self.x[0], threshold=None, max_component=False
+            )
+            io_utils.log_graph(
+                self.writer,
+                G,
+                name="grad/graph_orig",
+                epoch=epoch,
+                identify_self=False,
+                label_node_feat=True,
+                nodecolor="feat",
+                edge_vmax=None,
+                args=self.args,
+            )
         io_utils.log_matrix(self.writer, x_grad, "grad/feat", epoch)
-        # print(x_grad,  'X GRAD ----------------')
 
         adj_grad = adj_grad.detach().numpy()
         if self.graph_mode:
@@ -929,7 +934,7 @@ class ExplainModule(nn.Module):
             )
         else:
             # G = io_utils.denoise_graph(adj_grad, node_idx, label=label, threshold=0.5)
-            G = io_utils.denoise_graph(adj_grad, node_idx, threshold_num=30)
+            G = io_utils.denoise_graph(adj_grad, node_idx, threshold_num=8)
             io_utils.log_graph(
                 self.writer, G, name="grad/graph", epoch=epoch, args=self.args
             )

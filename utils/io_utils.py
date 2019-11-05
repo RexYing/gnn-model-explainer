@@ -190,7 +190,7 @@ def log_matrix(writer, mat, name, epoch, fig_size=(8, 6), dpi=200):
     writer.add_image(name, tensorboardX.utils.figure_to_image(fig), epoch)
 
 
-def denoise_graph(adj, node_idx, feat=None, label=None, threshold=0.1, threshold_num=None, max_component=True):
+def denoise_graph(adj, node_idx, feat=None, label=None, threshold=None, threshold_num=None, max_component=True):
     """Cleaning a graph by thresholding its node values.
 
     Args:
@@ -214,8 +214,10 @@ def denoise_graph(adj, node_idx, feat=None, label=None, threshold=0.1, threshold
             G.nodes[node]["label"] = label[node]
 
     if threshold_num is not None:
-        adj += np.random.rand(adj.shape[0], adj.shape[1]) * 1e-4
-        threshold = np.sort(adj[adj > 0])[-threshold_num]
+        # this is for symmetric graphs: edges are repeated twice in adj
+        adj_threshold_num = threshold_num * 2
+        #adj += np.random.rand(adj.shape[0], adj.shape[1]) * 1e-4
+        threshold = np.sort(adj[adj > 0])[-adj_threshold_num]
 
     if threshold is not None:
         weighted_edge_list = [
@@ -312,15 +314,17 @@ def log_graph(
     # remove_nodes = []
     # for u in Gc.nodes():
     #    if Gc
-    pos_layout = nx.kamada_kawai_layout(Gc)
-    # pos_layout = nx.spring_layout(Gc)
+    pos_layout = nx.kamada_kawai_layout(Gc, weight=None)
+    # pos_layout = nx.spring_layout(Gc, weight=None)
 
     weights = [d for (u, v, d) in Gc.edges(data="weight", default=1)]
     if edge_vmax is None:
         edge_vmax = statistics.median_high(
             [d for (u, v, d) in Gc.edges(data="weight", default=1)]
         )
-    edge_vmin = min([d for (u, v, d) in Gc.edges(data="weight", default=1)]) / 1.1
+    min_color = min([d for (u, v, d) in Gc.edges(data="weight", default=1)])
+    # color range: gray to black
+    edge_vmin = 2 * min_color - edge_vmax
     nx.draw(
         Gc,
         pos=pos_layout,
