@@ -30,26 +30,18 @@ import utils.io_utils as io_utils
 #
 ####################################
 def perturb(graph_list, p):
-    """ Perturb the list of graphs by adding/removing edges.
+    """ Perturb the list of (sparse) graphs by adding/removing edges.
     Args:
-        p_add: probability of adding edges. If None, estimate it according to graph density,
-            such that the expected number of added edges is equal to that of deleted edges.
-        p_del: probability of removing edges.
+        p: proportion of added edges based on current number of edges.
     Returns:
         A list of graphs that are perturbed from the original graphs.
     """
     perturbed_graph_list = []
     for G_original in graph_list:
         G = G_original.copy()
-        # TODO: why are the edge removal commented?
-        # edge_remove_count = 0
-        # for (u, v) in list(G.edges()):
-        #    if np.random.rand()<p:
-        #        G.remove_edge(u, v)
-        #        edge_remove_count += 1
-        edge_remove_count = int(G.number_of_edges() * p)
-        # randomly add the edges back
-        for _ in range(edge_remove_count):
+        edge_count = int(G.number_of_edges() * p)
+        # randomly add the edges between a pair of nodes without an edge.
+        for _ in range(edge_count):
             while True:
                 u = np.random.randint(0, G.number_of_nodes())
                 v = np.random.randint(0, G.number_of_nodes())
@@ -124,8 +116,9 @@ def gen_syn1(nb_shapes=80, width_basis=300, feature_generator=None, m=5):
 
     Returns:
         G                 :  A networkx graph
-        role_id           : TODO
-        name              : A graph identifier
+        role_id           :  A list with length equal to number of nodes in the entire graph (basis
+                          :  + shapes). role_id[i] is the ID of the role of node i. It is the label.
+        name              :  A graph identifier
     """
     basis_type = "ba"
     list_shapes = [["house"]] * nb_shapes
@@ -156,8 +149,8 @@ def gen_syn2(nb_shapes=100, width_basis=350):
 
     Returns:
         G                 :  A networkx graph
-        label             : TODO
-        name              : A graph identifier
+        label             :  Label of the nodes (determined by role_id and community)
+        name              :  A graph identifier
     """
     basis_type = "ba"
 
@@ -204,8 +197,8 @@ def gen_syn3(nb_shapes=80, width_basis=300, feature_generator=None, m=5):
 
     Returns:
         G                 :  A networkx graph
-        role_id           : TODO
-        name              : A graph identifier
+        role_id           :  Role ID for each node in synthetic graph.
+        name              :  A graph identifier
     """
     basis_type = "ba"
     list_shapes = [["cycle", 6]] * nb_shapes
@@ -238,7 +231,7 @@ def gen_syn4(nb_shapes=60, width_basis=8, feature_generator=None, m=4):
 
     Returns:
         G                 :  A networkx graph
-        role_id           :  TODO
+        role_id           :  Role ID for each node in synthetic graph
         name              :  A graph identifier
     """
     basis_type = "tree"
@@ -277,7 +270,7 @@ def gen_syn5(nb_shapes=80, width_basis=8, feature_generator=None, m=3):
 
     Returns:
         G                 :  A networkx graph
-        role_id           :  TODO
+        role_id           :  Role ID for each node in synthetic graph
         name              :  A graph identifier
     """
     basis_type = "tree"

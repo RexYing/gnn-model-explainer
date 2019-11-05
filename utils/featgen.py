@@ -26,7 +26,7 @@ class ConstFeatureGen(FeatureGen):
         feat_dict = {i:{'feat': np.array(self.val, dtype=np.float32)} for i in G.nodes()}
         print ('feat_dict[0]["feat"]:', feat_dict[0]['feat'].dtype)
         nx.set_node_attributes(G, feat_dict)
-        print ('G.node[0]["feat"]:', G.node[0]['feat'].dtype)
+        print ('G.nodes[0]["feat"]:', G.nodes[0]['feat'].dtype)
 
 
 class GaussianFeatureGen(FeatureGen):

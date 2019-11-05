@@ -219,7 +219,8 @@ def main():
         )
     else:
         if prog_args.dataset == "ppi_essential":
-            prog_args.loss_weight = torch.tensor([1.0, 5.0], dtype=torch.float).cuda() # TODO: what is this for?
+            # class weight in CE loss for handling imbalanced label classes
+            prog_args.loss_weight = torch.tensor([1.0, 5.0], dtype=torch.float).cuda() 
         # Explain Node prediction
         model = models.GcnEncoderNode(
             input_dim=input_dim,
@@ -232,7 +233,8 @@ def main():
         )
     if prog_args.gpu:
         model = model.cuda()
-    model.load_state_dict(ckpt["model_state"]) # TODO: Is this a standard model attribute? If we want to make the model generic enough we might need to work on this
+    # load state_dict (obtained by model.state_dict() when saving checkpoint)
+    model.load_state_dict(ckpt["model_state"]) 
 
     # Create explainer
     explainer = explain.Explainer(

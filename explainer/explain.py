@@ -34,11 +34,6 @@ import utils.train_utils as train_utils
 import utils.graph_utils as graph_utils
 
 
-# import models_gcn.GCN as GCN
-from models_gcn import (
-    GCN,
-)  # TODO why are there 2 different GCNs (in models.py and in models_gcn.py)?
-
 use_cuda = torch.cuda.is_available()
 FloatTensor = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
 LongTensor = torch.cuda.LongTensor if use_cuda else torch.LongTensor
@@ -355,78 +350,6 @@ class Explainer:
 
         return masked_adjs
 
-    def explain_nodes_gnn_cluster(self, node_indices, args, graph_idx=0):
-        masked_adjs = [
-            self.explain(node_idx, graph_idx=graph_idx) for node_idx in node_indices
-        ]
-
-        graphs = []
-        feats = []
-        adjs = []
-        for i, idx in enumerate(node_indices):
-            new_idx, _, feat, _, _ = self.extract_neighborhood(idx)
-            G = io_utils.denoise_graph(masked_adjs[i], new_idx, feat, threshold=0.1)
-            denoised_feat = np.array([G.nodes[node]["feat"] for node in G.nodes()])
-            denoised_adj = nx.to_numpy_matrix(G)
-            graphs.append(G)
-            feats.append(denoised_feat)
-            adjs.append(denoised_adj)
-
-        model = GCN(
-            input_dim=feats[0].shape[1],
-            hidden_dim=64,
-            output_dim=64,
-            num_layers=2,
-            normalize_embedding_l2=True,
-        ).cuda()
-        pred_all = []
-
-        for i in range(len(graphs)):
-            adj = Variable(
-                torch.from_numpy(adjs[i]).float(), requires_grad=False
-            ).cuda()
-            feature = Variable(
-                torch.from_numpy(feats[i]).float(), requires_grad=False
-            ).cuda()
-            # import pdb
-            # pdb.set_trace()
-            pred = model(feature, adj)
-            pred_all.append(pred.data.cpu().numpy())
-
-        X = np.concatenate(pred_all, axis=0)
-
-        # pdb.set_trace()
-        from sklearn.manifold import TSNE
-
-        plt.switch_backend("agg")
-
-        db = DBSCAN(eps=0.2, min_samples=len(graphs) // 4).fit(X)
-        core_samples_mask = np.zeros_like(db.labels_, dtype=bool)
-        core_samples_mask[db.core_sample_indices_] = True
-        labels = db.labels_
-        n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
-        n_noise_ = list(labels).count(-1)
-
-        count_dict = np.bincount(db.labels_[db.labels_ >= 0])
-        graphs_denoised = []
-        counter = 0
-        for i in range(len(graphs)):
-            graph = graphs[i]
-            nodes = []
-            for node in graph.nodes():
-                label = db.labels_[counter]
-                if label >= 0 and count_dict[label] < len(graphs) * 2:
-                    nodes.append(node)
-                counter += 1
-            graphs_denoised.append(graph.subgraph(nodes))
-
-        for i, graph in enumerate(graphs):
-            io_utils.log_graph(self.writer, graph, "align/before" + str(i))
-        for i, graph in enumerate(graphs_denoised):
-            io_utils.log_graph(self.writer, graph, "align/after" + str(i))
-
-        return masked_adjs
-
     # GRAPH EXPLAINER
     def explain_graphs(self, graph_indices):
         """
@@ -475,9 +398,7 @@ class Explainer:
         return masked_adjs
 
     def log_representer(self, rep_val, sim_val, alpha, graph_idx=0):
-        """
-        TODO
-        """
+        """ visualize output of representer instances. """
         rep_val = rep_val.cpu().detach().numpy()
         sim_val = sim_val.cpu().detach().numpy()
         alpha = alpha.cpu().detach().numpy()
@@ -537,11 +458,10 @@ class Explainer:
             "local/representer_neigh", tensorboardX.utils.figure_to_image(fig), 0
         )
 
-
-    # Utilities
     def representer(self):
         """
-        TODO
+        experiment using representer theorem for finding supporting instances.
+        https://papers.nips.cc/paper/8141-representer-point-selection-for-explaining-deep-neural-networks.pdf
         """
         self.model.train()
         self.model.zero_grad()
@@ -563,6 +483,8 @@ class Explainer:
             pred_idx = pred_idx.cuda()
         self.alpha = self.preds_grad
 
+
+    # Utilities
     def extract_neighborhood(self, node_idx, graph_idx=0):
         """Returns the neighborhood of a given ndoe."""
         neighbors_adj_row = self.neighborhoods[graph_idx][node_idx, :]
