@@ -99,7 +99,7 @@ class MyConv(pyg_nn.MessagePassing):
         self.lin = nn.Linear(in_channels, out_channels)
         self.lin_update = nn.Linear(out_channels + in_channels, out_channels)
 
-    def forward(self, x, edge_index):
+    def forward(self, x, edge_index, edge_weights=None):
         # x has shape [N, in_channels]
         # edge_index has shape [2, E]
 
@@ -108,12 +108,15 @@ class MyConv(pyg_nn.MessagePassing):
         # Transform node feature matrix.
         #self_x = self.lin_self(x)
 
-        return self.propagate(edge_index, size=(x.size(0), x.size(0)), x=x)
+        if edge_weights is None:
+          edge_weights = torch.ones((edge_index.size()[1], 1))
 
-    def message(self, x_i, x_j, edge_index, size):
+        return self.propagate(edge_index, size=(x.size(0), x.size(0)), x=x, edge_weights=edge_weights)
+
+    def message(self, x_i, x_j, edge_index, size, edge_weights):
         # Compute messages
         # x_j has shape [E, out_channels]
-        return self.lin(x_j)
+        return torch.mul(edge_weights, self.lin(x_j))
 
     def update(self, aggr_out, x):
         # aggr_out has shape [N, out_channels]

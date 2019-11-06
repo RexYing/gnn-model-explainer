@@ -131,6 +131,7 @@ def syn_task1(args, writer=None):
                 'feat': data['feat'],
                 'label': data['labels'],
                 'pred': ypred.cpu().detach().numpy(),
+                'pyg_G': pyg_G,
                 'train_idx': train_mask}
     # import pdb
     # pdb.set_trace()
