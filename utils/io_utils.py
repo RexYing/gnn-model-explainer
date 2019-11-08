@@ -83,14 +83,14 @@ def denoise_graph(adj, node_idx, feat=None, label=None, threshold=0.1, threshold
     num_nodes = adj.shape[-1]
     G = nx.Graph()
     G.add_nodes_from(range(num_nodes))
-    G.node[node_idx]['self'] = 1
+    G.nodes[node_idx]['self'] = 1
     #print('num nodes : ', G.number_of_nodes())
     if feat is not None:
         for node in G.nodes():
-            G.node[node]['feat'] = feat[node]
+            G.nodes[node]['feat'] = feat[node]
     if label is not None:
         for node in G.nodes():
-            G.node[node]['label'] = label[node] 
+            G.nodes[node]['label'] = label[node] 
 
     if threshold_num is not None:
         adj += np.random.rand(adj.shape[0],adj.shape[1])*1e-4
@@ -127,8 +127,8 @@ def log_graph(writer, Gc, name, identify_self=True, nodecolor='label', epoch=0, 
     # maximum value for node color
     vmax = 8
     for i in Gc.nodes():
-        if nodecolor == 'feat' and 'feat' in Gc.node[i]:
-            num_classes = Gc.node[i]['feat'].size()[0]
+        if nodecolor == 'feat' and 'feat' in Gc.nodes[i]:
+            num_classes = Gc.nodes[i]['feat'].size()[0]
             if num_classes >= 10:
                 cmap = plt.get_cmap('tab20')
                 vmax = 19
@@ -139,13 +139,12 @@ def log_graph(writer, Gc, name, identify_self=True, nodecolor='label', epoch=0, 
       
     feat_labels={}
     for i in Gc.nodes():
-        if identify_self and 'self' in Gc.node[i]:
+        if identify_self and 'self' in Gc.nodes[i]:
             node_colors.append(0)
-        elif nodecolor == 'label' and 'label' in Gc.node[i]:
-            node_colors.append(Gc.node[i]['label'] + 1)
-        elif nodecolor == 'feat' and 'feat' in Gc.node[i]:
-            #print(Gc.node[i]['feat'])
-            feat = Gc.node[i]['feat'].detach().numpy()
+        elif nodecolor == 'label' and 'label' in Gc.nodes[i]:
+            node_colors.append(Gc.nodes[i]['label'] + 1)
+        elif nodecolor == 'feat' and 'feat' in Gc.nodes[i]:
+            feat = Gc.nodes[i]['feat'].detach().numpy()
             # idx with pos val in 1D array
             feat_class = 0
             for j in range(len(feat)):
