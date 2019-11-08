@@ -1166,8 +1166,8 @@ def main():
     else:
         print("Using CPU")
 
+    # use --bmname=[dataset_name] for Reddit-Binary, Mutagenicity
     if prog_args.bmname is not None:
-        # benchmark_task_val(prog_args, writer=writer)
         benchmark_task(prog_args, writer=writer)
     elif prog_args.pkl_fname is not None:
         pkl_task(prog_args)
