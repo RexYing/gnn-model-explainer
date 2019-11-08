@@ -63,16 +63,6 @@ def syn_task1(args, writer=None):
     labels = torch.LongTensor(labels)
     print ('Done generating graph.')
 
-    # if args.method == 'att':
-    # print('Method: att')
-    # model = models.GcnEncoderNode(args.input_dim, args.hidden_dim, args.output_dim, num_classes,
-    # args.num_gc_layers, bn=args.bn, args=args)
-
-    # else:
-    # print('Method:', args.method)
-    # model = models.GcnEncoderNode(args.input_dim, args.hidden_dim, args.output_dim, num_classes,
-    # args.num_gc_layers, bn=args.bn, args=args)
-
     model = GCNNet(args.input_dim, args.hidden_dim, args.output_dim, num_classes, args.num_gc_layers, args=args)
     
     if args.gpu:
@@ -98,7 +88,6 @@ def syn_task1(args, writer=None):
         for batch in loader:
             # print ('batch:', batch.feat)
             opt.zero_grad()
-            # print ('batch:', batch)
             pred = model(batch)
         
             pred = pred[train_mask]
@@ -133,10 +122,14 @@ def syn_task1(args, writer=None):
                 'pred': ypred.cpu().detach().numpy(),
                 'pyg_G': pyg_G,
                 'train_idx': train_mask}
-    # import pdb
-    # pdb.set_trace()
     io_utils.save_checkpoint(model, opt, args, num_epochs=-1, cg_dict=cg_data)
 
-prog_args = arg_parse()
-path = os.path.join(prog_args.logdir, io_utils.gen_prefix(prog_args) + '_pyg')
-syn_task1(prog_args, writer=SummaryWriter(path))
+def main(): 
+    prog_args = arg_parse()
+    path = os.path.join(prog_args.logdir, io_utils.gen_prefix(prog_args) + '_pyg')
+
+    if 'syn' in prog_args.dataset:
+        syn_task1(prog_args, writer=SummaryWriter(path))
+
+if __name__ == "__main__":
+    main()
