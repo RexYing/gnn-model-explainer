@@ -196,10 +196,10 @@ def preprocess_input_graph(G, labels, normalize_adj=False):
 
 
     existing_node = list(G.nodes)[-1]
-    feat_dim = G.node[existing_node]['feat'].shape[0]
+    feat_dim = G.nodes[existing_node]['feat'].shape[0]
     f = np.zeros((G.number_of_nodes(), feat_dim), dtype=float)
     for i, u in enumerate(G.nodes()):
-        f[i, :] = G.node[u]['feat']
+        f[i, :] = G.nodes[u]['feat']
 
     # add batch dim
     adj = np.expand_dims(adj, axis=0)
