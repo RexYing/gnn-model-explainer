@@ -215,7 +215,7 @@ class Explainer:
 
         fname = 'masked_adj_' + io_utils.gen_explainer_prefix(self.args) + (
                 'node_idx_'+str(node_idx)+'graph_idx_'+str(self.graph_idx)+'.npy')
-        with open(os.path.join(self.writer.logdir, fname), 'wb') as outfile:
+        with open(os.path.join(self.args.logdir, fname), 'wb') as outfile:
             np.save(outfile, np.asarray(masked_adj.copy()))
             print("Saved adjacency matrix to ", fname)
         return masked_adj
@@ -679,7 +679,7 @@ class ExplainModule(nn.Module):
         adj_sum = torch.sum(self.adj)
         return mask_sum / adj_sum
 
-    def forward(self, node_idx, unconstrained=False, mask_features=True):
+    def forward(self, node_idx, unconstrained=False, mask_features=True, marginalize=False):
         x = self.x.cuda() if self.args.gpu else self.x
 
         if unconstrained:
@@ -695,7 +695,6 @@ class ExplainModule(nn.Module):
                     if self.use_sigmoid
                     else self.feat_mask
                 )
-                marginalize = False
                 if marginalize:
                     std_tensor = torch.ones_like(x, dtype=torch.float) / 2
                     mean_tensor = torch.zeros_like(x, dtype=torch.float) - x
@@ -965,7 +964,7 @@ class ExplainModule(nn.Module):
             )
         else:
             G = io_utils.denoise_graph(
-                masked_adj, node_idx, threshold_num=8, max_component=True
+                masked_adj, node_idx, threshold=0.1, max_component=True
             )
             io_utils.log_graph(
                 self.writer,

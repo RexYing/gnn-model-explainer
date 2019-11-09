@@ -199,22 +199,6 @@ def train(
             iter += 1
             avg_loss += loss
 
-            # log once per XX epochs
-            if (
-                epoch % 10 == 0
-                and batch_idx == len(dataset) // 2
-                and args.method == "soft-assign"
-                and writer is not None
-            ):
-                io_utils.log_assignment(model.assign_tensor, writer, epoch, writer_batch_idx)
-                io_utils.log_graph2(
-                    adj,
-                    batch_num_nodes,
-                    writer,
-                    epoch,
-                    writer_batch_idx,
-                    model.assign_tensor,
-                )
         avg_loss /= batch_idx + 1
         elapsed = time.time() - begin_time
         if writer is not None:
@@ -313,8 +297,8 @@ def train_node_classifier(G, labels, model, args, writer=None):
         nn.utils.clip_grad_norm(model.parameters(), args.clip)
 
         optimizer.step()
-        for param_group in optimizer.param_groups:
-            print(param_group["lr"])
+        #for param_group in optimizer.param_groups:
+        #    print(param_group["lr"])
         elapsed = time.time() - begin_time
 
         result_train, result_test = evaluate_node(
@@ -336,22 +320,23 @@ def train_node_classifier(G, labels, model, args, writer=None):
                 "acc", {"train": result_train["acc"], "test": result_test["acc"]}, epoch
             )
 
-        print(
-            "epoch: ",
-            epoch,
-            "; loss: ",
-            loss.item(),
-            "; train_acc: ",
-            result_train["acc"],
-            "; test_acc: ",
-            result_test["acc"],
-            "; train_prec: ",
-            result_train["prec"],
-            "; test_prec: ",
-            result_test["prec"],
-            "; epoch time: ",
-            "{0:0.2f}".format(elapsed),
-        )
+        if epoch % 10 == 0:
+            print(
+                "epoch: ",
+                epoch,
+                "; loss: ",
+                loss.item(),
+                "; train_acc: ",
+                result_train["acc"],
+                "; test_acc: ",
+                result_test["acc"],
+                "; train_prec: ",
+                result_train["prec"],
+                "; test_prec: ",
+                result_test["prec"],
+                "; epoch time: ",
+                "{0:0.2f}".format(elapsed),
+            )
 
         if scheduler is not None:
             scheduler.step()
@@ -442,8 +427,8 @@ def train_node_classifier_multigraph(G_list, labels, model, args, writer=None):
         nn.utils.clip_grad_norm(model.parameters(), args.clip)
 
         optimizer.step()
-        for param_group in optimizer.param_groups:
-            print(param_group["lr"])
+        #for param_group in optimizer.param_groups:
+        #    print(param_group["lr"])
         elapsed = time.time() - begin_time
 
         result_train, result_test = evaluate_node(
