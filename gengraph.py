@@ -187,10 +187,10 @@ def gen_syn2(nb_shapes=100, width_basis=350):
 def gen_syn3(nb_shapes=80, width_basis=300, feature_generator=None, m=5):
     """ Synthetic Graph #3:
 
-    Start with Barabasi-Albert graph and attach cycle-shaped subgraphs.
+    Start with Barabasi-Albert graph and attach grid-shaped subgraphs.
 
     Args:
-        nb_shapes         :  The number of shapes (here 'cycles') that should be added to the base graph.
+        nb_shapes         :  The number of shapes (here 'grid') that should be added to the base graph.
         width_basis       :  The width of the basis graph (here 'Barabasi-Albert' random graph).
         feature_generator :  A `FeatureGenerator` for node features. If `None`, add constant features to nodes.
         m                 :  number of edges to attach to existing node (for BA graph)
@@ -201,7 +201,7 @@ def gen_syn3(nb_shapes=80, width_basis=300, feature_generator=None, m=5):
         name              :  A graph identifier
     """
     basis_type = "ba"
-    list_shapes = [["cycle", 6]] * nb_shapes
+    list_shapes = [["grid", 3]] * nb_shapes
 
     plt.figure(figsize=(8, 6), dpi=300)
 

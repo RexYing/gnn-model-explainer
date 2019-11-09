@@ -101,14 +101,14 @@ frameworks, for example [d3.js](http://observablehq.com). We provide [an example
 |----------|:-------------------:|--------------|
 | Synthetic #1 | `syn1`  | Random BA graph with House attachments.  |
 | Synthetic #2 | `syn2`  | Random BA graph with community features. | 
-| Synthetic #3 | `syn3`  | Random BA graph with Cycle attachments.  |
-| Synthetic #4 | `syn4`  | Random Tree with Cycle attachments. |
+| Synthetic #3 | `syn3`  | Random BA graph with grid attachments.  |
+| Synthetic #4 | `syn4`  | Random Tree with cycle attachments. |
 | Synthetic #5 | `syn5`  | Random Tree with grid attachments. | 
 | Enron        | `enron` | Enron email dataset [source](https://www.cs.cmu.edu/~enron/). |
 | PPI          | `ppi_essential` | Protein-Protein interaction dataset. |
 | | | |
-| Mutagenicity*      | `mutagenicity`  | Predicting the mutagenicity of molecules ([source](https://ls11-www.cs.tu-dortmund.de/staff/morris/graphkerneldatasets)). |
-| Proteins*      | `proteins`  | Protein-Protein interaction ([source](https://ls11-www.cs.tu-dortmund.de/staff/morris/graphkerneldatasets)). |
+| Reddit*      | `REDDIT-BINARY`  | Reddit-Binary Graphs ([source](https://ls11-www.cs.tu-dortmund.de/staff/morris/graphkerneldatasets)). |
+| Mutagenicity*      | `Mutagenicity`  | Predicting the mutagenicity of molecules ([source](https://ls11-www.cs.tu-dortmund.de/staff/morris/graphkerneldatasets)). |
 | Tox 21*      | `Tox21_AHR`  | Predicting a compound's toxicity ([source](https://ls11-www.cs.tu-dortmund.de/staff/morris/graphkerneldatasets)). |
 
 > Datasets with a * are passed with the `--bmname` parameter rather than `--dataset` as they require being downloaded manually.
@@ -117,7 +117,8 @@ frameworks, for example [d3.js](http://observablehq.com). We provide [an example
 
 
 ### Using the explainer on other models
-
+A graph attention model is provided. This repo is still being actively developed to support other
+GNN models in the future.
 
 ## Changelog
 
