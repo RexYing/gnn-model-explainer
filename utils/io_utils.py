@@ -199,7 +199,7 @@ def denoise_graph(adj, node_idx, feat=None, label=None, threshold=None, threshol
         - feat              :  An array of node features.
         - label             :  A list of node labels.
         - threshold         :  The weight threshold.
-        - theshold_num      :  The maximum number of nodes to threshold (TODO ?)
+        - theshold_num      :  The maximum number of nodes to threshold.
         - max_component     :  TODO
     """
     num_nodes = adj.shape[-1]
@@ -217,7 +217,9 @@ def denoise_graph(adj, node_idx, feat=None, label=None, threshold=None, threshol
         # this is for symmetric graphs: edges are repeated twice in adj
         adj_threshold_num = threshold_num * 2
         #adj += np.random.rand(adj.shape[0], adj.shape[1]) * 1e-4
-        threshold = np.sort(adj[adj > 0])[-adj_threshold_num]
+        neigh_size = len(adj[adj > 0])
+        threshold_num = min(neigh_size, adj_threshold_num)
+        threshold = np.sort(adj[adj > 0])[-threshold_num]
 
     if threshold is not None:
         weighted_edge_list = [

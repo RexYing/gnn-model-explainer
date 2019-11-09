@@ -933,7 +933,7 @@ class ExplainModule(nn.Module):
             )
         else:
             # G = io_utils.denoise_graph(adj_grad, node_idx, label=label, threshold=0.5)
-            G = io_utils.denoise_graph(adj_grad, node_idx, threshold_num=8)
+            G = io_utils.denoise_graph(adj_grad, node_idx, threshold_num=12)
             io_utils.log_graph(
                 self.writer, G, name="grad/graph", epoch=epoch, args=self.args
             )
@@ -964,7 +964,7 @@ class ExplainModule(nn.Module):
             )
         else:
             G = io_utils.denoise_graph(
-                masked_adj, node_idx, threshold=0.1, max_component=True
+                masked_adj, node_idx, threshold_num=12, max_component=True
             )
             io_utils.log_graph(
                 self.writer,
