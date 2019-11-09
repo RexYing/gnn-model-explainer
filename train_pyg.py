@@ -59,6 +59,7 @@ def syn_task1(args, writer=None):
     # print ('G.node[0]:', G.node[0]['feat'].dtype)
     # print ('Original labels:', labels)
     pyg_G = from_networkx(G)
+    pyg_G.num_nodes = G.number_of_nodes()
     num_classes = max(labels)+1
     labels = torch.LongTensor(labels)
     print ('Done generating graph.')
