@@ -664,7 +664,7 @@ def build_aromaticity_dataset():
 
 
 def gen_train_plt_name(args):
-    return "results/" + io_utils.gen_prefix(args) + ".png"
+    return "results/" + gen_prefix(args) + ".png"
 
 
 def log_assignment(assign_tensor, writer, epoch, batch_idx):
