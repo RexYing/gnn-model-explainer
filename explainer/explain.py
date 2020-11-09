@@ -1,6 +1,6 @@
 """ explain.py
 
-    Implementation of the explainer. 
+    Implementation of the explainer.
 """
 
 import math
@@ -69,7 +69,7 @@ class Explainer:
         self.writer = writer
         self.print_training = print_training
 
-    
+
     # Main method
     def explain(
         self, node_idx, graph_idx=0, graph_mode=False, unconstrained=False, model="exp"
@@ -90,7 +90,7 @@ class Explainer:
             )
             print("neigh graph idx: ", node_idx, node_idx_new)
             sub_label = np.expand_dims(sub_label, axis=0)
-        
+
         sub_adj = np.expand_dims(sub_adj, axis=0)
         sub_feat = np.expand_dims(sub_feat, axis=0)
 
@@ -227,7 +227,7 @@ class Explainer:
         Explain nodes
 
         Args:
-            - node_indices  :  Indices of the nodes to be explained 
+            - node_indices  :  Indices of the nodes to be explained
             - args          :  Program arguments (mainly for logging paths)
             - graph_idx     :  Index of the graph to explain the nodes from (if multiple).
         """
@@ -319,6 +319,7 @@ class Explainer:
                 G,
                 "graph/{}_{}_{}".format(self.args.dataset, model, i),
                 identify_self=True,
+                args=self.args
             )
 
         pred_all = np.concatenate((pred_all), axis=0)
@@ -374,6 +375,7 @@ class Explainer:
                 "graph/graphidx_{}_label={}".format(graph_idx, label),
                 identify_self=False,
                 nodecolor="feat",
+                args=self.args
             )
             masked_adjs.append(masked_adj)
 
@@ -391,6 +393,7 @@ class Explainer:
                 "graph/graphidx_{}".format(graph_idx),
                 identify_self=False,
                 nodecolor="feat",
+                args=self.args
             )
 
         # plot cmap for graphs' node features
@@ -500,7 +503,7 @@ class Explainer:
     def align(
         self, ref_feat, ref_adj, ref_node_idx, curr_feat, curr_adj, curr_node_idx, args
     ):
-        """ Tries to find an alignment between two graphs. 
+        """ Tries to find an alignment between two graphs.
         """
         ref_adj = torch.FloatTensor(ref_adj)
         curr_adj = torch.FloatTensor(curr_adj)

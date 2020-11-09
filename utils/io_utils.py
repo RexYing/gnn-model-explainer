@@ -80,7 +80,7 @@ def create_filename(save_dir, args, isbest=False, num_epochs=-1):
 
 def save_checkpoint(model, optimizer, args, num_epochs=-1, isbest=False, cg_dict=None):
     """Save pytorch model checkpoint.
-    
+
     Args:
         - model         : The PyTorch model to save.
         - optimizer     : The optimizer used to train the model.
@@ -348,13 +348,11 @@ def log_graph(
     fig.axes[0].xaxis.set_visible(False)
     fig.canvas.draw()
 
-    if args is None:
-        save_path = os.path.join("log/", name + ".pdf")
-    else:
-        save_path = os.path.join(
-            "log", name + gen_explainer_prefix(args) + "_" + str(epoch) + ".pdf"
-        )
-        print("log/" + name + gen_explainer_prefix(args) + "_" + str(epoch) + ".pdf")
+    logdir = "log" if not hasattr(args, "logdir") or not args.logdir else str(args.logdir)
+    if nodecolor != "feat":
+        name += gen_explainer_prefix(args)
+    save_path = os.path.join(logdir, name  + "_" + str(epoch) + ".pdf")
+    print(logdir + "/" + name + gen_explainer_prefix(args) + "_" + str(epoch) + ".pdf")
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     plt.savefig(save_path, format="pdf")
 
@@ -363,10 +361,10 @@ def log_graph(
 
 
 def plot_cmap(cmap, ncolor):
-    """ 
+    """
     A convenient function to plot colors of a matplotlib cmap
     Credit goes to http://gvallver.perso.univ-pau.fr/?p=712
- 
+
     Args:
         ncolor (int): number of color to show
         cmap: a cmap object or a matplotlib color name
@@ -653,7 +651,7 @@ def build_aromaticity_dataset():
             for j in range(nb_bonds):
                 if mol.GetBondWithIdx(j).GetIsAromatic():
                     aromatic_bonds.append(j)
-                    is_aromatic = True 
+                    is_aromatic = True
             moldict['aromaticity'] = is_aromatic
             moldict['aromatic_bonds'] = aromatic_bonds
             collector.append(moldict)
