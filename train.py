@@ -194,7 +194,7 @@ def train(
             else:
                 loss = model.loss(ypred, label, adj, batch_num_nodes)
             loss.backward()
-            nn.utils.clip_grad_norm(model.parameters(), args.clip)
+            nn.utils.clip_grad_norm_(model.parameters(), args.clip)
             optimizer.step()
             iter += 1
             avg_loss += loss
@@ -294,7 +294,7 @@ def train_node_classifier(G, labels, model, args, writer=None):
         else:
             loss = model.loss(ypred_train, labels_train)
         loss.backward()
-        nn.utils.clip_grad_norm(model.parameters(), args.clip)
+        nn.utils.clip_grad_norm_(model.parameters(), args.clip)
 
         optimizer.step()
         #for param_group in optimizer.param_groups:
@@ -424,7 +424,7 @@ def train_node_classifier_multigraph(G_list, labels, model, args, writer=None):
         else:
             loss = model.loss(ypred_train_cmp, labels_train)
         loss.backward()
-        nn.utils.clip_grad_norm(model.parameters(), args.clip)
+        nn.utils.clip_grad_norm_(model.parameters(), args.clip)
 
         optimizer.step()
         #for param_group in optimizer.param_groups:
