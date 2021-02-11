@@ -516,7 +516,7 @@ def evaluate(dataset, model, args, name="Validation", max_num_examples=None):
     preds = np.hstack(preds)
 
     result = {
-        "prec": metrics.precision_score(labels, preds, average="macro"),
+        "prec": metrics.precision_score(labels, preds, average="macro", zero_division=0),
         "recall": metrics.recall_score(labels, preds, average="macro"),
         "acc": metrics.accuracy_score(labels, preds),
     }
@@ -534,13 +534,13 @@ def evaluate_node(ypred, labels, train_idx, test_idx):
     labels_test = np.ravel(labels[:, test_idx])
 
     result_train = {
-        "prec": metrics.precision_score(labels_train, pred_train, average="macro"),
+        "prec": metrics.precision_score(labels_train, pred_train, average="macro", zero_division=0),
         "recall": metrics.recall_score(labels_train, pred_train, average="macro"),
         "acc": metrics.accuracy_score(labels_train, pred_train),
         "conf_mat": metrics.confusion_matrix(labels_train, pred_train),
     }
     result_test = {
-        "prec": metrics.precision_score(labels_test, pred_test, average="macro"),
+        "prec": metrics.precision_score(labels_test, pred_test, average="macro", zero_division=0),
         "recall": metrics.recall_score(labels_test, pred_test, average="macro"),
         "acc": metrics.accuracy_score(labels_test, pred_test),
         "conf_mat": metrics.confusion_matrix(labels_test, pred_test),
