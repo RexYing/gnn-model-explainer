@@ -56,7 +56,7 @@ where `EXPERIMENT_NAME` is the experiment you want to replicate.
 For a complete list of options provided by the explainer:
 
 ```
-python train.py --help
+python explainer_main.py --help
 ```
 
 #### Visualizing the explanations
