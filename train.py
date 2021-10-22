@@ -89,9 +89,9 @@ def prepare_data(graphs, args, test_graphs=None, max_nodes=0):
     )
 
     dataset_sampler = graph_utils.GraphSampler(
-        val_graphs,
-        normalize=False,
-        max_num_nodes=max_nodes,
+        val_graphs, 
+        normalize=False, 
+        max_num_nodes=max_nodes, 
         features=args.feature_type
     )
     val_dataset_loader = torch.utils.data.DataLoader(
@@ -126,7 +126,7 @@ def prepare_data(graphs, args, test_graphs=None, max_nodes=0):
 
 #############################
 #
-# Training
+# Training 
 #
 #############################
 def train(
@@ -194,7 +194,7 @@ def train(
             else:
                 loss = model.loss(ypred, label, adj, batch_num_nodes)
             loss.backward()
-            nn.utils.clip_grad_norm_(model.parameters(), args.clip)
+            nn.utils.clip_grad_norm(model.parameters(), args.clip)
             optimizer.step()
             iter += 1
             avg_loss += loss
@@ -294,7 +294,7 @@ def train_node_classifier(G, labels, model, args, writer=None):
         else:
             loss = model.loss(ypred_train, labels_train)
         loss.backward()
-        nn.utils.clip_grad_norm_(model.parameters(), args.clip)
+        nn.utils.clip_grad_norm(model.parameters(), args.clip)
 
         optimizer.step()
         #for param_group in optimizer.param_groups:
@@ -424,7 +424,7 @@ def train_node_classifier_multigraph(G_list, labels, model, args, writer=None):
         else:
             loss = model.loss(ypred_train_cmp, labels_train)
         loss.backward()
-        nn.utils.clip_grad_norm_(model.parameters(), args.clip)
+        nn.utils.clip_grad_norm(model.parameters(), args.clip)
 
         optimizer.step()
         #for param_group in optimizer.param_groups:
@@ -516,7 +516,7 @@ def evaluate(dataset, model, args, name="Validation", max_num_examples=None):
     preds = np.hstack(preds)
 
     result = {
-        "prec": metrics.precision_score(labels, preds, average="macro", zero_division=0),
+        "prec": metrics.precision_score(labels, preds, average="macro"),
         "recall": metrics.recall_score(labels, preds, average="macro"),
         "acc": metrics.accuracy_score(labels, preds),
     }
@@ -534,13 +534,13 @@ def evaluate_node(ypred, labels, train_idx, test_idx):
     labels_test = np.ravel(labels[:, test_idx])
 
     result_train = {
-        "prec": metrics.precision_score(labels_train, pred_train, average="macro", zero_division=0),
+        "prec": metrics.precision_score(labels_train, pred_train, average="macro"),
         "recall": metrics.recall_score(labels_train, pred_train, average="macro"),
         "acc": metrics.accuracy_score(labels_train, pred_train),
         "conf_mat": metrics.confusion_matrix(labels_train, pred_train),
     }
     result_test = {
-        "prec": metrics.precision_score(labels_test, pred_test, average="macro", zero_division=0),
+        "prec": metrics.precision_score(labels_test, pred_test, average="macro"),
         "recall": metrics.recall_score(labels_test, pred_test, average="macro"),
         "acc": metrics.accuracy_score(labels_test, pred_test),
         "conf_mat": metrics.confusion_matrix(labels_test, pred_test),
@@ -1177,3 +1177,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
