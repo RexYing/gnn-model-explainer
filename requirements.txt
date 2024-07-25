@@ -1,5 +1,5 @@
 tensorboardX==1.9
-torch==1.6.0
+torch==2.2.0
 torchvision==0.7.0
 sklearn==0.0
 pandas==0.25.2
