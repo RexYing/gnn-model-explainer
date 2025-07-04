@@ -116,4 +116,38 @@ path/
 .idea/
 .vscode/
 
+# Claude settings
+.claude/*
+
+# Poetry
+# Note: Do not ignore poetry.lock - it should be committed to version control
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+.hypothesis/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Virtual environments
+venv/
+env/
+.venv/
+.env/
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
 

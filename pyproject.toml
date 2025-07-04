@@ -1,0 +1,87 @@
+[tool.poetry]
+name = "gnn-explainer"
+version = "0.1.0"
+description = "Graph Neural Network Explainer"
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+packages = [{include = "explainer"}, {include = "utils"}]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+tensorboardX = "^2.5"
+torch = {version = "^1.13.0", source = "pypi"}
+torchvision = {version = "^0.14.0", source = "pypi"}
+scikit-learn = "^1.0.0"
+pandas = "^1.5.0"
+opencv-python = "^4.5.0"
+networkx = "^2.8"
+matplotlib = "^3.5.0"
+tensorboard = "^2.10.0"
+jupyter = "^1.0.0"
+ipywidgets = "^8.0.0"
+seaborn = "^0.12.0"
+numpy = "^1.23.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+pytest-cov = "^4.1.0"
+pytest-mock = "^3.11.1"
+
+[tool.poetry.scripts]
+test = "pytest:main"
+tests = "pytest:main"
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--verbose",
+]
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "slow: Slow running tests",
+]
+
+[tool.coverage.run]
+source = ["explainer", "utils"]
+omit = [
+    "*/tests/*",
+    "*/__init__.py",
+    "*/notebook/*",
+    "setup.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if __name__ == .__main__.:",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]
+precision = 2
+show_missing = true
+skip_covered = false
+fail_under = 80
+
+[tool.coverage.html]
+directory = "htmlcov"
+
+[tool.coverage.xml]
+output = "coverage.xml"
+
+[[tool.poetry.source]]
+name = "pypi"
+priority = "primary"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
